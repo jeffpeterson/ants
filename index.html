@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A functional ant-colony pathfinding playground with two pheromone fields."
+    >
+    <title>Formic — Ant Colony Pathfinding Lab</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="brand-mark" aria-hidden="true">
+        <span>F</span>
+        <i></i>
+      </div>
+      <div class="title-block">
+        <p class="eyebrow">FORMIC / PATHFINDING LAB 01</p>
+        <h1>Routes emerge. No map required.</h1>
+        <p>
+          Watch a colony turn local chemical signals into a shared route from
+          hill to food.
+        </p>
+      </div>
+      <div class="header-readout">
+        <span id="run-state" class="run-state" data-running="true">RUNNING</span>
+        <span><strong id="delivery-count">0</strong> deliveries</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="stage-card" aria-labelledby="stage-heading">
+        <div class="stage-toolbar">
+          <div>
+            <p class="eyebrow">LIVE COLONY</p>
+            <h2 id="stage-heading">Graph field</h2>
+          </div>
+          <div class="legend" aria-label="Visualization legend">
+            <span><i class="legend-slow"></i>Slow trail</span>
+            <span><i class="legend-fast"></i>Food signal</span>
+            <span><i class="legend-scout"></i>Scout</span>
+          </div>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas
+            id="colony-canvas"
+            tabindex="0"
+            role="img"
+            aria-label="Random graph with ants traveling between an ant hill and food. Click a node to inspect it; arrow keys move the selection."
+          ></canvas>
+          <div class="canvas-note" aria-hidden="true">CLICK A NODE TO INSPECT</div>
+        </div>
+
+        <div class="stage-footer">
+          <p id="stage-status">Scouts are mapping the graph. No food signal yet.</p>
+          <dl>
+            <div>
+              <dt>Runtime</dt>
+              <dd id="runtime">0.0 s</dd>
+            </div>
+            <div>
+              <dt>Returning</dt>
+              <dd id="returning-count">0</dd>
+            </div>
+            <div>
+              <dt>Scouts</dt>
+              <dd id="scout-count">0/0</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <aside class="control-rail" aria-label="Simulation controls">
+        <section class="control-card transport">
+          <div class="button-row primary-actions">
+            <button id="toggle-run" class="button button-primary" aria-pressed="true">
+              <span class="play-icon" aria-hidden="true"></span>
+              <span id="toggle-label">Pause colony</span>
+            </button>
+            <button id="step-once" class="button button-icon"
+              aria-label="Advance one step">
+              +1
+            </button>
+          </div>
+          <div class="button-row">
+            <button id="new-graph" class="button">New graph</button>
+            <button id="reset-run" class="button">Reset run</button>
+            <button id="clear-trails" class="button">Clear trails</button>
+          </div>
+        </section>
+
+        <section class="metric-card" aria-labelledby="results-heading">
+          <div class="section-heading">
+            <p class="eyebrow">LIVE RESULTS</p>
+            <h2 id="results-heading">Colony readout</h2>
+          </div>
+          <dl class="metrics">
+            <div>
+              <dt>Best route</dt>
+              <dd id="best-distance">—</dd>
+              <small><span id="best-hops">—</span> hops</small>
+            </div>
+            <div>
+              <dt>Efficiency</dt>
+              <dd id="efficiency">0%</dd>
+              <small>vs. shortest route</small>
+            </div>
+            <div>
+              <dt>Signal focus</dt>
+              <dd id="signal-focus">0%</dd>
+              <small>dominant food arcs</small>
+            </div>
+          </dl>
+        </section>
+
+        <section class="control-card">
+          <div class="section-heading">
+            <p class="eyebrow">PLAYGROUND</p>
+            <h2>Colony</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="antCount">
+              <span>Ants <output id="antCount-value">64</output></span>
+              <input id="antCount" type="range" min="8" max="120" value="64">
+            </label>
+            <label class="slider-row" for="scoutRate">
+              <span>Scouts <output id="scoutRate-value">16%</output></span>
+              <input id="scoutRate" type="range" min="0" max="55" value="16">
+            </label>
+            <label class="slider-row" for="speed">
+              <span>Ant speed <output id="speed-value">0.17 u/s</output></span>
+              <input id="speed" type="range" min="4" max="65" value="17">
+            </label>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Pheromones</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="slowHalfLife">
+              <span>Slow half-life <output id="slowHalfLife-value">42 s</output></span>
+              <input id="slowHalfLife" type="range" min="5" max="120" value="42">
+            </label>
+            <label class="slider-row" for="fastHalfLife">
+              <span>Food half-life <output id="fastHalfLife-value">9 s</output></span>
+              <input id="fastHalfLife" type="range" min="2" max="40" value="9">
+            </label>
+            <label class="slider-row" for="fastInfluence">
+              <span>Food influence <output id="fastInfluence-value">3.2×</output></span>
+              <input id="fastInfluence" type="range" min="0" max="100" value="32">
+            </label>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Graph</h2>
+            <small>Applied on the next graph</small>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="nodeCount">
+              <span>Nodes <output id="nodeCount-value">24</output></span>
+              <input id="nodeCount" type="range" min="8" max="36" value="24">
+            </label>
+            <label class="slider-row" for="density">
+              <span>Density <output id="density-value">42%</output></span>
+              <input id="density" type="range" min="5" max="90" value="42">
+            </label>
+          </div>
+          <div class="seed-row">
+            <label for="seed">Graph seed</label>
+            <input id="seed" type="number" min="0" max="4294967295" value="1837">
+            <button id="load-seed" class="button">Load</button>
+          </div>
+
+          <div class="toggle-row">
+            <label><input id="show-ants" type="checkbox" checked> Ants</label>
+            <label><input id="show-trails" type="checkbox" checked> Trails</label>
+            <label><input id="show-labels" type="checkbox" checked> Labels</label>
+          </div>
+        </section>
+
+        <section class="control-card inspector" aria-labelledby="inspector-heading">
+          <div class="section-heading">
+            <p class="eyebrow">NODE INSPECTOR</p>
+            <h2 id="inspector-heading">Route probabilities</h2>
+          </div>
+          <p id="inspector-empty" class="muted">
+            Select any node in the graph to see a worker’s next-hop odds.
+          </p>
+          <div id="inspector-content" hidden>
+            <div class="inspector-title">
+              <div>
+                <strong id="selected-title">Node 01</strong>
+                <small id="selected-meta">Junction · 3 connected edges</small>
+              </div>
+              <div>
+                <button id="set-hill" class="text-button">Set hill</button>
+                <button id="set-food" class="text-button">Set food</button>
+              </div>
+            </div>
+            <ol id="probabilities" class="probabilities"></ol>
+          </div>
+        </section>
+
+        <details class="algorithm-card">
+          <summary>
+            <span>
+              <span class="eyebrow">THE ALGORITHM</span>
+              Why the short route wins
+            </span>
+            <span aria-hidden="true">+</span>
+          </summary>
+          <div>
+            <p>
+              Every crossing adds a slow, undirected trace. Successful ants
+              retrace their loop-free route and add a fast signal to the
+              <em>opposite</em> arc—the direction toward food. That deposit
+              grows stronger closer to food, preserving a readable gradient.
+            </p>
+            <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
+            <p>
+              Workers sample that distribution; scouts sample uniformly.
+              Short routes receive more deposits per minute because ants finish
+              more round trips. No ant knows the global shortest path.
+            </p>
+          </div>
+        </details>
+      </aside>
+    </main>
+
+    <footer>
+      <p>PURE CORE / SEEDED RANDOMNESS / LOCAL DECISIONS</p>
+      <p>FORMIC LAB · <span>slow memory + fast food signal</span></p>
+    </footer>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
