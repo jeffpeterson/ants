@@ -44,7 +44,7 @@ Deno.test("maximum-size graphs stay sparse, connected, and quick to generate", (
   const [graph] = generateGraph(77, { nodeCount: 1_200, density: 0.9 });
   const duration = performance.now() - startedAt;
   assertEquals(graph.nodes.length, 1_200);
-  assertEquals(graph.edges.length, 3_005);
+  assertEquals(graph.edges.length, 3_302);
   assertEquals(new Set(graph.edges.map(({ id }) => id)).size, graph.edges.length);
   assert(graph.edges.every(({ a, b, length }) => a !== b && length > 0));
   assert(graph.nodes.every(({ x, y }) =>
@@ -53,6 +53,25 @@ Deno.test("maximum-size graphs stay sparse, connected, and quick to generate", (
   ));
   assert(isConnected(graph));
   assert(duration < 1_500, `Max graph took ${duration.toFixed(0)}ms`);
+});
+
+Deno.test("the graph backbone has no bridge-connected islands", () => {
+  const [graph] = generateGraph(91, { nodeCount: 120, density: 0.05 });
+  const reachableWithout = (excludedId) => {
+    const visit = (frontier, seen) => {
+      if (frontier.length === 0) return seen;
+      const [node, ...rest] = frontier;
+      if (seen.includes(node)) return visit(rest, seen);
+      const neighbors = graph.adjacency[node].filter((neighbor) =>
+        edgeKey(node, neighbor) !== excludedId
+      );
+      return visit([...rest, ...neighbors], [...seen, node]);
+    };
+    return visit([graph.nodes[0].id], []).length;
+  };
+  assert(
+    graph.edges.every(({ id }) => reachableWithout(id) === graph.nodes.length),
+  );
 });
 
 Deno.test("fast pheromone fades faster than slow pheromone", () => {
@@ -95,7 +114,7 @@ Deno.test("worker odds are proportional to pheromone while scouts stay uniform",
   assertEquals(scout.map(({ probability }) => probability), [0.5, 0.5]);
 });
 
-Deno.test("slow coverage repels workers but fast food signal overrides it", () => {
+Deno.test("coverage steers scouts while workers respond only to food", () => {
   const params = {
     baseWeight: 0.05,
     slowAvoidance: 1,
@@ -104,18 +123,60 @@ Deno.test("slow coverage repels workers but fast food signal overrides it", () =
     fastExponent: 1,
   };
   const covered = {
-    slow: { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 2 },
+    slow: {
+      [arcKey(0, 1)]: 0,
+      [arcKey(1, 0)]: 0,
+      [arcKey(0, 2)]: 1,
+      [arcKey(2, 0)]: 1,
+    },
     fast: { [arcKey(0, 1)]: 0, [arcKey(0, 2)]: 0 },
   };
-  const repelled = choiceProbabilities(0, [1, 2], covered, params);
+  const workers = choiceProbabilities(0, [1, 2], covered, params);
+  const repelled = choiceProbabilities(0, [1, 2], covered, params, true);
+  assertEquals(workers.map(({ probability }) => probability), [0.5, 0.5]);
   assert(repelled[0].probability > repelled[1].probability);
 
   const confirmedFood = {
-    slow: { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 10 },
+    slow: {
+      [arcKey(0, 1)]: 0,
+      [arcKey(1, 0)]: 0,
+      [arcKey(0, 2)]: 10,
+      [arcKey(2, 0)]: 0,
+    },
     fast: { [arcKey(0, 1)]: 0, [arcKey(0, 2)]: 0.5 },
   };
   const attracted = choiceProbabilities(0, [1, 2], confirmedFood, params);
   assert(attracted[1].probability > 0.9);
+});
+
+Deno.test("only scouts leave the hill before a food signal exists", () => {
+  const initial = createSimulation({ seed: 41 });
+  const started = stepSimulation(initial, 1 / 30);
+  const moving = started.ants.filter(({ edge }) => edge !== null);
+  assert(moving.length > 0);
+  assert(
+    moving.every(({ scoutScore }) => scoutScore < started.params.scoutRate),
+  );
+});
+
+Deno.test("early food signal stays on a bounded set of routes", () => {
+  const initial = createSimulation({ seed: 1837 });
+  const afterThirtySeconds = Array.from({ length: 900 }).reduce(
+    (state) => stepSimulation(state, 1 / 30),
+    initial,
+  );
+  const fastValues = Object.values(afterThirtySeconds.pheromones.fast);
+  const activeArcs = fastValues.filter((value) => value > 0.01).length;
+  assert(
+    activeArcs / fastValues.length < 0.3,
+    `Food signal spread to ${activeArcs}/${fastValues.length} arcs`,
+  );
+  assert(
+    Math.abs(
+      afterThirtySeconds.stats.bestDistance -
+        afterThirtySeconds.stats.shortestDistance,
+    ) < 1e-9,
+  );
 });
 
 Deno.test("return deposit points toward food and becomes stronger along the gradient", () => {
@@ -125,14 +186,20 @@ Deno.test("return deposit points toward food and becomes stronger along the grad
       [edgeKey(1, 2)]: { length: 1 },
     },
   };
-  const ant = {
+  const nearFoodAnt = {
     route: [0, 1, 2],
     returnIndex: 2,
     tripDistance: 2,
+    edge: { from: 2, to: 1 },
+  };
+  const nearHillAnt = {
+    ...nearFoodAnt,
+    returnIndex: 1,
+    edge: { from: 1, to: 0 },
   };
   const params = { fastDeposit: 1, foodGradientFloor: 0.25 };
-  const nearFood = foodDepositForReturn(ant, graph, params, 2);
-  const nearHill = foodDepositForReturn(ant, graph, params, 1);
+  const nearFood = foodDepositForReturn(nearFoodAnt, graph, params);
+  const nearHill = foodDepositForReturn(nearHillAnt, graph, params);
   assertEquals(nearFood.key, arcKey(1, 2));
   assertEquals(nearHill.key, arcKey(0, 1));
   assert(nearFood.amount > nearHill.amount);
@@ -160,6 +227,17 @@ Deno.test("simulation transitions are immutable and eventually deliver food", ()
   assert(final.stats.deliveries > 0, "Expected at least one completed delivery");
   assert(Object.values(final.pheromones.slow).some((value) => value > 0));
   assert(Object.values(final.pheromones.fast).some((value) => value > 0));
+  const returning = final.ants.filter(({ mode, edge }) =>
+    mode === "return" && edge !== null
+  );
+  assert(returning.length > 0);
+  assert(
+    returning.every(({ edge }) =>
+      edge.nextReturnIndex < edge.returnIndex &&
+      final.pheromones.slow[arcKey(edge.from, edge.to)] > 0
+    ),
+    "Food carriers must follow a hillward coverage arc",
+  );
   assert(
     Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
     "Expected scouts to discover the shortest route",

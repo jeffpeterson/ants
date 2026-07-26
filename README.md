@@ -19,31 +19,37 @@ deno task test
 
 ## Algorithm
 
-The graph uses jittered spatial cells, a local random spanning tree, and extra nearby
-edges. This stays sparse and connected from 8 through 1,200 nodes. Ants move at one
-constant physical speed: crossing an edge takes `edge.length / speed`, so a route of
+The graph uses jittered spatial cells, a bridge-free local grid backbone, and extra
+nearby edges. This stays sparse and connected from 8 through 1,200 nodes. Ants move at
+one constant physical speed: crossing an edge takes `edge.length / speed`, so a route of
 length `D` naturally permits laps at a rate proportional to `1 / D`.
 
 The colony maintains two fields:
 
-- `slow[e]` is undirected, long-lived coverage memory deposited on every completed edge.
-  Searching ants prefer edges with less of it.
+- `slow[u → v]` is directed, long-lived coverage signal. Explorers deposit on the
+  homeward arc of every crossing, so it points toward the hill.
 - `fast[u → v]` is a directed, short-lived food signal. A successful ant retraces its
   loop-erased route and deposits on the reverse arc, pointing toward food. Deposit
   strength increases with route distance from the hill, so the field has an explicit
   foodward gradient.
 
-A worker at node `u` samples neighbor `v` in proportion to:
+Scouts prefer locally uncovered edges:
 
 ```text
-base / (1 + slowAvoidance · slow[e]^α)
-  + fastInfluence · fast[u → v]^β
+scoutWeight(u, v) =
+  base / (1 + slowAvoidance · (slow[u → v] + slow[v → u])^α)
 ```
 
-Scouts sample uniformly. Fast attraction is not divided by slow avoidance, so a
-confirmed food route overrides the coverage preference. There is no global route
-heuristic and no inverse-length term in that choice. Short routes win because their ants
-return and reinforce them more often.
+Workers wait at the hill until a local food signal exists, then sample adjacent arcs by
+`base + fastInfluence · fast[u → v]^β`. A worker that reaches the end of a stale signal
+uses its own breadcrumb route to head home. Food carriers follow adjacent hillward
+coverage arcs that monotonically move backward through their own loop-erased
+breadcrumbs; the immediately previous breadcrumb is the guaranteed fallback.
+
+No routing decision reads the precomputed shortest route, graph-wide distance, or node
+coordinates. Ants inspect only adjacent signals and their own route memory. The
+shortest-path calculation is display-only. Short routes win because their ants return
+and reinforce them more often.
 
 Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
 fields. Returning ants finish trips from retired sources while old signals evaporate.

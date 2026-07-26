@@ -38,8 +38,8 @@
             <h2 id="stage-heading">Graph field</h2>
           </div>
           <div class="legend" aria-label="Visualization legend">
-            <span><i class="legend-slow"></i>Coverage memory</span>
-            <span><i class="legend-fast"></i>Food signal</span>
+            <span><i class="legend-slow"></i>Coverage → hill</span>
+            <span><i class="legend-fast"></i>Food → food</span>
             <span><i class="legend-scout"></i>Scout</span>
           </div>
         </div>
@@ -59,7 +59,9 @@
         </div>
 
         <div class="stage-footer">
-          <p id="stage-status">Scouts are mapping the graph. No food signal yet.</p>
+          <p id="stage-status">
+            Scouts are laying hillward breadcrumbs. Workers are waiting for food signal.
+          </p>
           <dl>
             <div>
               <dt>Runtime</dt>
@@ -155,7 +157,7 @@
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
             </label>
             <label class="slider-row" for="slowAvoidance">
-              <span>Coverage avoidance <output id="slowAvoidance-value">0.5×</output></span>
+              <span>Scout avoidance <output id="slowAvoidance-value">0.5×</output></span>
               <input id="slowAvoidance" type="range" min="0" max="80" value="5">
             </label>
             <label class="slider-row" for="fastHalfLife">
@@ -220,6 +222,9 @@
             </div>
             <p id="food-action-help" class="action-help"></p>
             <ol id="probabilities" class="probabilities"></ol>
+            <p id="probability-empty" class="muted">
+              No food signal here. A worker waits or follows its breadcrumbs home.
+            </p>
           </div>
         </section>
 
@@ -233,15 +238,16 @@
           </summary>
           <div>
             <p>
-              Every crossing marks an edge as explored, so searching workers
-              prefer less-covered ground. Successful ants retrace their
-              loop-free route and add a fast signal to the <em>opposite</em>
-              arc—the direction toward food. Fast attraction overrides slow
-              avoidance once a route succeeds.
+              Exploring ants mark the reverse arc of each crossing, creating a
+              local breadcrumb field toward the hill. Scouts prefer
+              less-covered edges; workers wait for and follow foodward signal.
+              A carrier follows adjacent hillward coverage along its own
+              loop-free breadcrumbs and lays food signal on the opposite arc.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
-              Workers sample that distribution; scouts sample uniformly.
+              Workers sample the foodward distribution; scouts sample the
+              least-covered local options.
               Short routes receive more deposits per minute because equal-speed
               ants finish more round trips. Add or move food and the old signal
               will fade while the uninterrupted colony adapts.
@@ -253,7 +259,7 @@
 
     <footer>
       <p>PURE CORE / SEEDED RANDOMNESS / LOCAL DECISIONS</p>
-      <p>FORMIC LAB · <span>coverage avoidance + food attraction</span></p>
+      <p>FORMIC LAB · <span>coverage → hill / food signal → food</span></p>
     </footer>
 
     <script type="module" src="./src/app.js"></script>

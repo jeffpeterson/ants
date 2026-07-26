@@ -13,6 +13,7 @@ export const DEFAULTS = Object.freeze({
   slowExponent: 1.15,
   fastExponent: 1.8,
   baseWeight: 0.06,
+  reversePenalty: 0.18,
   foodGradientFloor: 0.3,
   pheromoneCap: 18,
 });
@@ -44,6 +45,11 @@ export const sanitizeParams = (values = {}) => ({
     finiteOr(DEFAULTS.slowAvoidance, values.slowAvoidance),
   ),
   fastInfluence: clamp(0, 10, finiteOr(DEFAULTS.fastInfluence, values.fastInfluence)),
+  reversePenalty: clamp(
+    0.01,
+    1,
+    finiteOr(DEFAULTS.reversePenalty, values.reversePenalty),
+  ),
 });
 
 export const nextRandom = (seed) => {
@@ -99,29 +105,6 @@ const makeEdge = (nodes, first, second) => ({
   length: distance(nodes[first], nodes[second]),
 });
 
-const spanningTree = (nodes, columns, seed) =>
-  nodes.slice(1).reduce(
-    ({ edges, rngSeed }, node) => {
-      const column = node.id % columns;
-      const row = Math.floor(node.id / columns);
-      const left = column > 0 ? node.id - 1 : null;
-      const above = row > 0 ? node.id - columns : null;
-      const [choice, nextSeed] = nextRandom(rngSeed);
-      const parent = left === null
-        ? above
-        : above === null
-        ? left
-        : choice < 0.5
-        ? left
-        : above;
-      return {
-        edges: [...edges, makeEdge(nodes, node.id, parent)],
-        rngSeed: nextSeed,
-      };
-    },
-    { edges: [], rngSeed: seed },
-  );
-
 const LOCAL_OFFSETS = Object.freeze([
   [-1, 0],
   [0, -1],
@@ -131,12 +114,17 @@ const LOCAL_OFFSETS = Object.freeze([
   [0, -2],
 ]);
 
-const localEdges = (nodes, columns) => {
+const GRID_OFFSETS = Object.freeze([
+  [-1, 0],
+  [0, -1],
+]);
+
+const edgesForOffsets = (nodes, columns, offsets) => {
   const rows = Math.ceil(nodes.length / columns);
   return nodes.flatMap((node) => {
     const column = node.id % columns;
     const row = Math.floor(node.id / columns);
-    return LOCAL_OFFSETS.flatMap(([columnOffset, rowOffset]) => {
+    return offsets.flatMap(([columnOffset, rowOffset]) => {
       const otherColumn = column + columnOffset;
       const otherRow = row + rowOffset;
       const otherId = otherRow * columns + otherColumn;
@@ -147,6 +135,10 @@ const localEdges = (nodes, columns) => {
     });
   });
 };
+
+const localEdges = (nodes, columns) => edgesForOffsets(nodes, columns, LOCAL_OFFSETS);
+
+const gridBackbone = (nodes, columns) => edgesForOffsets(nodes, columns, GRID_OFFSETS);
 
 const scoreCandidates = (candidates, seed) =>
   candidates.reduce(
@@ -188,19 +180,14 @@ const farthestPair = (nodes) => {
 export const generateGraph = (seed, values = {}) => {
   const params = sanitizeParams(values);
   const generated = generateNodes(params.nodeCount, seed);
-  const connected = spanningTree(
-    generated.nodes,
-    generated.columns,
-    generated.rngSeed,
-  );
-  const tree = connected.edges;
+  const tree = gridBackbone(generated.nodes, generated.columns);
   const treeIds = new Set(tree.map((edge) => edge.id));
   const optional = localEdges(generated.nodes, generated.columns)
     .filter((edge) => !treeIds.has(edge.id));
-  const scored = scoreCandidates(optional, connected.rngSeed);
+  const scored = scoreCandidates(optional, generated.rngSeed);
   const extraCount = Math.min(
     optional.length,
-    Math.round(params.nodeCount * (0.2 + params.density * 1.45)),
+    Math.round(params.nodeCount * params.density * 0.9),
   );
   const extras = scored.scored
     .toSorted((first, second) => first.score - second.score)
@@ -227,9 +214,16 @@ export const generateGraph = (seed, values = {}) => {
 export const isConnected = (graph) => {
   const visit = (frontier, seen) => {
     if (frontier.length === 0) return seen;
-    const [node, ...rest] = frontier;
-    if (seen.includes(node)) return visit(rest, seen);
-    return visit([...rest, ...graph.adjacency[node]], [...seen, node]);
+    const unseen = frontier.filter((node) => !seen.includes(node));
+    const nextSeen = [...seen, ...unseen];
+    const next = [
+      ...new Set(
+        unseen
+          .flatMap((node) => graph.adjacency[node])
+          .filter((node) => !nextSeen.includes(node)),
+      ),
+    ];
+    return visit(next, nextSeen);
   };
 
   return visit([graph.nodes[0].id], []).length === graph.nodes.length;
@@ -297,7 +291,12 @@ export const shortestRouteToFood = (graph, start = graph.hill) =>
     .reduce((shortest, route) => route.distance < shortest.distance ? route : shortest);
 
 const emptyPheromones = (graph) => ({
-  slow: Object.fromEntries(graph.edges.map((edge) => [edge.id, 0])),
+  slow: Object.fromEntries(
+    graph.edges.flatMap((edge) => [
+      [arcKey(edge.a, edge.b), 0],
+      [arcKey(edge.b, edge.a), 0],
+    ]),
+  ),
   fast: Object.fromEntries(
     graph.edges.flatMap((edge) => [
       [arcKey(edge.a, edge.b), 0],
@@ -381,20 +380,21 @@ export const decayPheromones = (pheromones, params, dt) => ({
 const previousNode = (ant) => ant.route.length > 1 ? ant.route.at(-2) : null;
 
 const eligibleNeighbors = (ant, graph) => {
-  const neighbors = graph.adjacency[ant.node];
-  const previous = previousNode(ant);
-  const withoutImmediateReverse = neighbors.filter((node) => node !== previous);
-  return withoutImmediateReverse.length > 0 ? withoutImmediateReverse : neighbors;
+  return graph.adjacency[ant.node];
 };
 
-const choiceWeight = (node, neighbor, pheromones, params) => {
-  const slow = pheromones.slow[edgeKey(node, neighbor)] ?? 0;
+const coverageOnEdge = (node, neighbor, pheromones) =>
+  (pheromones.slow[arcKey(node, neighbor)] ?? 0) +
+  (pheromones.slow[arcKey(neighbor, node)] ?? 0);
+
+const choiceWeight = (node, neighbor, pheromones, params, scout) => {
+  const coverage = coverageOnEdge(node, neighbor, pheromones);
   const fast = pheromones.fast[arcKey(node, neighbor)] ?? 0;
   const novelty = params.baseWeight /
-    (1 + params.slowAvoidance * Math.pow(slow, params.slowExponent));
+    (1 + params.slowAvoidance * Math.pow(coverage, params.slowExponent));
   const foodSignal = params.fastInfluence *
     Math.pow(fast, params.fastExponent);
-  return novelty + foodSignal;
+  return scout ? novelty : params.baseWeight + foodSignal;
 };
 
 export const choiceProbabilities = (
@@ -403,11 +403,13 @@ export const choiceProbabilities = (
   pheromones,
   params,
   scout = false,
+  discouragedNode = null,
 ) => {
   if (neighbors.length === 0) return [];
-  const weights = scout
-    ? neighbors.map(() => 1)
-    : neighbors.map((neighbor) => choiceWeight(node, neighbor, pheromones, params));
+  const weights = neighbors.map((neighbor) =>
+    choiceWeight(node, neighbor, pheromones, params, scout) *
+    (neighbor === discouragedNode ? params.reversePenalty : 1)
+  );
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   return neighbors.map((neighbor, index) => ({
     node: neighbor,
@@ -436,9 +438,30 @@ const chooseNextNode = (ant, graph, pheromones, params, seed) => {
     pheromones,
     params,
     scout,
+    previousNode(ant),
   );
   const [random, nextSeed] = nextRandom(seed);
   return [choose(probabilities, random), nextSeed];
+};
+
+export const coverageProbabilities = (
+  node,
+  neighbors,
+  pheromones,
+  params,
+) => {
+  if (neighbors.length === 0) return [];
+  const signals = neighbors.map((neighbor) =>
+    Math.pow(
+      pheromones.slow[arcKey(node, neighbor)] ?? 0,
+      params.slowExponent,
+    )
+  );
+  const total = signals.reduce((sum, signal) => sum + signal, 0);
+  return neighbors.map((neighbor, index) => ({
+    node: neighbor,
+    probability: total <= EPSILON ? 1 / neighbors.length : signals[index] / total,
+  }));
 };
 
 const eraseLoop = (route, node) => {
@@ -458,8 +481,6 @@ export const foodDepositForReturn = (
   params,
   returnIndex = ant.returnIndex,
 ) => {
-  const foodwardFrom = ant.route[returnIndex - 1];
-  const foodwardTo = ant.route[returnIndex];
   const distanceFromHill = cumulativeRouteDistance(
     graph,
     ant.route,
@@ -470,19 +491,24 @@ export const foodDepositForReturn = (
       (distanceFromHill / Math.max(EPSILON, ant.tripDistance));
   return {
     channel: "fast",
-    key: arcKey(foodwardFrom, foodwardTo),
+    key: arcKey(ant.edge.to, ant.edge.from),
     amount: params.fastDeposit * gradient,
   };
 };
 
 const startSearchEdge = (ant, graph, pheromones, params, seed) => {
-  const [to, nextSeed] = chooseNextNode(
-    ant,
-    graph,
-    pheromones,
-    params,
-    seed,
+  const scout = ant.scoutScore < params.scoutRate;
+  const neighbors = eligibleNeighbors(ant, graph);
+  const hasFoodSignal = neighbors.some((neighbor) =>
+    (pheromones.fast[arcKey(ant.node, neighbor)] ?? 0) > EPSILON
   );
+  const homewardFallback = previousNode(ant);
+  if (!scout && !hasFoodSignal && homewardFallback === null) {
+    return [ant, seed];
+  }
+  const [to, nextSeed] = !scout && !hasFoodSignal
+    ? [homewardFallback, seed]
+    : chooseNextNode(ant, graph, pheromones, params, seed);
   return [
     {
       ...ant,
@@ -497,23 +523,44 @@ const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   ];
 };
 
-const startReturnEdge = (ant, graph) => {
-  const to = ant.route[ant.returnIndex - 1];
-  return {
-    ...ant,
-    edge: {
-      from: ant.node,
-      to,
-      progress: 0,
-      length: graph.edgeById[edgeKey(ant.node, to)].length,
-      returnIndex: ant.returnIndex,
+const startReturnEdge = (ant, graph, pheromones, params, seed) => {
+  const earlierNeighbors = graph.adjacency[ant.node]
+    .map((node) => ({ node, routeIndex: ant.route.lastIndexOf(node) }))
+    .filter(({ routeIndex }) => routeIndex >= 0 && routeIndex < ant.returnIndex);
+  const signaled = earlierNeighbors.filter(({ node }) =>
+    (pheromones.slow[arcKey(ant.node, node)] ?? 0) > EPSILON
+  );
+  const candidates = signaled.length > 0
+    ? signaled
+    : [{ node: ant.route[ant.returnIndex - 1], routeIndex: ant.returnIndex - 1 }];
+  const probabilities = coverageProbabilities(
+    ant.node,
+    candidates.map(({ node }) => node),
+    pheromones,
+    params,
+  );
+  const [random, nextSeed] = nextRandom(seed);
+  const to = choose(probabilities, random);
+  const nextReturnIndex = candidates.find(({ node }) => node === to).routeIndex;
+  return [
+    {
+      ...ant,
+      edge: {
+        from: ant.node,
+        to,
+        progress: 0,
+        length: graph.edgeById[edgeKey(ant.node, to)].length,
+        returnIndex: ant.returnIndex,
+        nextReturnIndex,
+      },
     },
-  };
+    nextSeed,
+  ];
 };
 
 const startEdge = (ant, graph, pheromones, params, seed) =>
   ant.mode === "return"
-    ? [startReturnEdge(ant, graph), seed]
+    ? startReturnEdge(ant, graph, pheromones, params, seed)
     : startSearchEdge(ant, graph, pheromones, params, seed);
 
 const beginReturn = (ant, graph, route) => {
@@ -548,7 +595,7 @@ const arriveSearching = (ant, graph) => {
 
 const arriveReturning = (ant, graph, params) => {
   const returnIndex = ant.edge.returnIndex;
-  const nextIndex = returnIndex - 1;
+  const nextIndex = ant.edge.nextReturnIndex;
   const atHill = nextIndex === 0;
   const foodDeposit = foodDepositForReturn(
     ant,
@@ -580,15 +627,19 @@ const arriveReturning = (ant, graph, params) => {
 };
 
 const arrive = (ant, graph, params) => {
-  const slowDeposit = {
+  const returning = ant.mode === "return";
+  const revisitingIndex = ant.route.indexOf(ant.edge.to);
+  const coverageFrom = returning || revisitingIndex >= 0 ? ant.edge.from : ant.edge.to;
+  const coverageTo = returning || revisitingIndex >= 0 ? ant.edge.to : ant.edge.from;
+  const coverageDeposit = {
     channel: "slow",
-    key: edgeKey(ant.edge.from, ant.edge.to),
+    key: arcKey(coverageFrom, coverageTo),
     amount: params.slowDeposit,
   };
-  const result = ant.mode === "return"
+  const result = returning
     ? arriveReturning(ant, graph, params)
     : arriveSearching(ant, graph);
-  return { ...result, deposits: [slowDeposit, ...result.deposits] };
+  return { ...result, deposits: [coverageDeposit, ...result.deposits] };
 };
 
 const advanceAnt = (
@@ -629,6 +680,14 @@ const advanceAnt = (
   const [movingAnt, nextSeed] = ant.edge
     ? [ant, seed]
     : startEdge(ant, graph, pheromones, params, seed);
+  if (movingAnt.edge === null) {
+    return {
+      ant: movingAnt,
+      seed: nextSeed,
+      deposits: [],
+      events: [],
+    };
+  }
   const distanceRemaining = movingAnt.edge.length * (1 - movingAnt.edge.progress);
   const travelDistance = params.speed * dt;
 
@@ -901,6 +960,10 @@ export const deriveMetrics = (state) => {
 
 export const probabilitiesForAntAtNode = (state, nodeId, scout = false) => {
   const neighbors = state.graph.adjacency[nodeId] ?? [];
+  const hasFoodSignal = neighbors.some((neighbor) =>
+    (state.pheromones.fast[arcKey(nodeId, neighbor)] ?? 0) > EPSILON
+  );
+  if (!scout && !hasFoodSignal) return [];
   return choiceProbabilities(
     nodeId,
     neighbors,

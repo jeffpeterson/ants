@@ -172,7 +172,7 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "Scouts are mapping the graph. No food signal yet.";
+    return "Scouts are laying hillward breadcrumbs. Workers are waiting for food signal.";
   }
   if (metrics.deliveries === 0) {
     return "Food found. Returning ants are laying a directed signal.";
@@ -253,6 +253,7 @@ const renderInspector = (current) => {
   const rows = probabilitiesForAntAtNode(simulation, selectedNode)
     .map(probabilityRow);
   byId("probabilities").replaceChildren(...rows);
+  byId("probability-empty").hidden = rows.length > 0;
 };
 
 const renderInterface = (current) => {
@@ -325,20 +326,19 @@ const drawBestRoute = (simulation, points) => {
   context.restore();
 };
 
-const drawSlowPheromones = (simulation, points) => {
-  context.save();
-  context.lineCap = "round";
+const drawSlowPheromones = (simulation, points) =>
   simulation.graph.edges.forEach((edge) => {
-    const amount = simulation.pheromones.slow[edge.id];
-    const intensity = strength(amount);
-    if (intensity < 0.01) return;
-    context.strokeStyle = "#c58b2a";
-    context.globalAlpha = 0.08 + intensity * 0.42;
-    context.lineWidth = 1 + intensity * 8;
-    line(context, points[edge.a], points[edge.b]);
+    drawCoverageArc(
+      points[edge.a],
+      points[edge.b],
+      simulation.pheromones.slow[arcKey(edge.a, edge.b)],
+    );
+    drawCoverageArc(
+      points[edge.b],
+      points[edge.a],
+      simulation.pheromones.slow[arcKey(edge.b, edge.a)],
+    );
   });
-  context.restore();
-};
 
 const offsetArc = (from, to, amount = 3.2) => {
   const dx = to.x - from.x;
@@ -356,14 +356,14 @@ const pointAlong = (from, to, amount) => ({
   y: from.y + (to.y - from.y) * amount,
 });
 
-const drawArrow = (from, to, intensity) => {
+const drawArrow = (from, to, intensity, color) => {
   const point = pointAlong(from, to, 0.66);
   const angle = Math.atan2(to.y - from.y, to.x - from.x);
   const size = 3.5 + intensity * 3;
   context.save();
   context.translate(point.x, point.y);
   context.rotate(angle);
-  context.fillStyle = "#087f8c";
+  context.fillStyle = color;
   context.globalAlpha = 0.34 + intensity * 0.62;
   context.beginPath();
   context.moveTo(size, 0);
@@ -372,6 +372,30 @@ const drawArrow = (from, to, intensity) => {
   context.closePath();
   context.fill();
   context.restore();
+};
+
+const drawCoverageArc = (from, to, amount) => {
+  const intensity = strength(amount);
+  if (intensity < 0.008) return;
+  const [start, end] = offsetArc(from, to, 2.8);
+  const gradient = context.createLinearGradient(
+    start.x,
+    start.y,
+    end.x,
+    end.y,
+  );
+  gradient.addColorStop(0, "rgba(197, 139, 42, 0.06)");
+  gradient.addColorStop(
+    1,
+    `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
+  );
+  context.save();
+  context.strokeStyle = gradient;
+  context.lineWidth = 1 + intensity * 5.2;
+  context.lineCap = "round";
+  line(context, start, end);
+  context.restore();
+  drawArrow(start, end, intensity, "#c58b2a");
 };
 
 const drawFastArc = (from, to, amount, elapsed) => {
@@ -394,7 +418,7 @@ const drawFastArc = (from, to, amount, elapsed) => {
   context.lineDashOffset = -elapsed * 18;
   line(context, start, end);
   context.restore();
-  drawArrow(start, end, intensity);
+  drawArrow(start, end, intensity, "#087f8c");
 };
 
 const drawFastPheromones = (simulation, points) =>
