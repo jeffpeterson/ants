@@ -1,9 +1,12 @@
 import {
+  addFood,
   arcKey,
   clearPheromones,
   createSimulation,
   deriveMetrics,
+  moveFood,
   probabilitiesForAntAtNode,
+  removeFood,
   resetRun,
   setEndpoint,
   stepSimulation,
@@ -22,6 +25,8 @@ let model = {
   simulation: createSimulation({ seed: initialSeed }),
   running: !prefersReducedMotion,
   selectedNode: null,
+  movingFood: null,
+  notice: "",
   view: { ants: true, trails: true, labels: true },
 };
 
@@ -29,6 +34,8 @@ const replaceSimulation = (current, simulation) => ({
   ...current,
   simulation,
   selectedNode: null,
+  movingFood: null,
+  notice: "",
 });
 
 const reduceModel = (current, action) => {
@@ -70,12 +77,73 @@ const reduceModel = (current, action) => {
         }),
       };
     case "select":
-      return { ...current, selectedNode: action.node };
+      return action.place && current.movingFood !== null
+        ? reduceModel(current, { type: "placeFood", node: action.node })
+        : { ...current, selectedNode: action.node };
     case "endpoint":
       return replaceSimulation(
         current,
         setEndpoint(current.simulation, action.kind, current.selectedNode),
       );
+    case "addFood": {
+      const simulation = addFood(current.simulation, current.selectedNode);
+      return {
+        ...current,
+        simulation,
+        notice: simulation === current.simulation
+          ? "That node cannot hold food."
+          : `Added food at Node ${String(current.selectedNode + 1).padStart(2, "0")}.`,
+      };
+    }
+    case "removeFood": {
+      const simulation = removeFood(current.simulation, current.selectedNode);
+      return {
+        ...current,
+        simulation,
+        notice: simulation === current.simulation
+          ? "At least one food source must remain."
+          : `Removed food from Node ${
+            String(current.selectedNode + 1).padStart(2, "0")
+          }.`,
+      };
+    }
+    case "beginFoodMove":
+      return {
+        ...current,
+        movingFood: current.selectedNode,
+        notice: `Moving food from Node ${
+          String(current.selectedNode + 1).padStart(2, "0")
+        }. Select its destination.`,
+      };
+    case "cancelFoodMove":
+      return {
+        ...current,
+        movingFood: null,
+        notice: "Food move cancelled.",
+      };
+    case "placeFood": {
+      if (current.movingFood === null || action.node === null) return current;
+      const simulation = moveFood(
+        current.simulation,
+        current.movingFood,
+        action.node,
+      );
+      return simulation === current.simulation
+        ? {
+          ...current,
+          selectedNode: action.node,
+          notice: "Choose a junction that is not the hill or another food source.",
+        }
+        : {
+          ...current,
+          simulation,
+          selectedNode: action.node,
+          movingFood: null,
+          notice: `Food moved to Node ${
+            String(action.node + 1).padStart(2, "0")
+          }. Old trails will fade naturally.`,
+        };
+    }
     case "view":
       return {
         ...current,
@@ -97,6 +165,12 @@ const formatPercent = (value) => `${Math.round(value * 100)}%`;
 
 const statusCopy = (current, metrics) => {
   if (!current.running) return "Paused — inspect the signal or advance one step.";
+  if (
+    current.simulation.stats.lastFoodChangeAt !== null &&
+    current.simulation.stats.bestDistance === null
+  ) {
+    return "Food changed. Old signals remain while the colony searches and adapts.";
+  }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
     return "Scouts are mapping the graph. No food signal yet.";
   }
@@ -121,12 +195,14 @@ const renderMetrics = (current) => {
   setText("efficiency", formatPercent(metrics.efficiency));
   setText("signal-focus", formatPercent(metrics.signalFocus));
   setText("scout-count", `${metrics.scouts}/${current.simulation.ants.length}`);
+  setText("food-count", metrics.foods);
   setText("stage-status", statusCopy(current, metrics));
   setText("runtime", `${current.simulation.elapsed.toFixed(1)} s`);
   byId("run-state").dataset.running = String(current.running);
   setText("run-state", current.running ? "RUNNING" : "PAUSED");
   setText("toggle-label", current.running ? "Pause colony" : "Run colony");
   byId("toggle-run").setAttribute("aria-pressed", String(current.running));
+  setText("environment-status", current.notice);
 };
 
 const probabilityRow = ({ node, probability }) => {
@@ -154,17 +230,26 @@ const renderInspector = (current) => {
   if (!hasSelection) return;
 
   const degree = simulation.graph.adjacency[selectedNode].length;
+  const isFood = simulation.graph.foods.includes(selectedNode);
+  const moving = current.movingFood !== null;
   const role = selectedNode === simulation.graph.hill
     ? "Ant hill"
-    : selectedNode === simulation.graph.food
+    : isFood
     ? "Food source"
     : "Junction";
   setText("selected-title", `Node ${String(selectedNode + 1).padStart(2, "0")}`);
   setText("selected-meta", `${role} · ${degree} connected edges`);
-  byId("set-hill").disabled = selectedNode === simulation.graph.hill ||
-    selectedNode === simulation.graph.food;
-  byId("set-food").disabled = selectedNode === simulation.graph.food ||
+  byId("set-hill").disabled = moving ||
+    selectedNode === simulation.graph.hill || isFood;
+  byId("add-food").hidden = moving || isFood ||
     selectedNode === simulation.graph.hill;
+  byId("move-food").hidden = moving || !isFood;
+  byId("remove-food").hidden = moving || !isFood;
+  byId("remove-food").disabled = simulation.graph.foods.length === 1;
+  byId("food-action-help").textContent = isFood &&
+      simulation.graph.foods.length === 1
+    ? "Move the last food source instead of removing it."
+    : "";
   const rows = probabilitiesForAntAtNode(simulation, selectedNode)
     .map(probabilityRow);
   byId("probabilities").replaceChildren(...rows);
@@ -173,6 +258,18 @@ const renderInspector = (current) => {
 const renderInterface = (current) => {
   renderMetrics(current);
   renderInspector(current);
+  const moving = current.movingFood !== null;
+  setText(
+    "canvas-note-text",
+    moving ? "SELECT A FOOD DESTINATION" : "CLICK A NODE TO INSPECT",
+  );
+  byId("cancel-food-move").hidden = !moving;
+  canvas.setAttribute(
+    "aria-label",
+    moving
+      ? "Select a junction as the new food destination. Press Escape to cancel."
+      : "Random graph with ants traveling between an ant hill and food. Click a node to inspect it; arrow keys move the selection.",
+  );
 };
 
 const canvasSize = () => {
@@ -361,36 +458,55 @@ const drawFood = (point) => {
   context.restore();
 };
 
-const drawNode = (node, simulation, point, selected, showLabels) => {
+const drawSelectionRing = (point, moving) => {
+  context.save();
+  context.strokeStyle = "#315cf5";
+  context.lineWidth = 2;
+  context.setLineDash(moving ? [4, 4] : []);
+  context.beginPath();
+  context.arc(point.x, point.y, 18, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+};
+
+const drawNode = (
+  node,
+  simulation,
+  point,
+  selected,
+  moving,
+  showLabels,
+) => {
+  const isFood = simulation.graph.foods.includes(node.id);
+  const compact = simulation.graph.nodes.length > 180;
   if (node.id === simulation.graph.hill) {
     drawHill(point);
-  } else if (node.id === simulation.graph.food) {
+  } else if (isFood) {
     drawFood(point);
   } else {
     context.save();
     context.fillStyle = "#fffaf0";
-    context.strokeStyle = selected ? "#315cf5" : "#526068";
-    context.lineWidth = selected ? 3 : 1.5;
+    context.strokeStyle = "#526068";
+    context.lineWidth = compact ? 1 : 1.5;
     context.beginPath();
-    context.arc(point.x, point.y, selected ? 7 : 5, 0, Math.PI * 2);
+    context.arc(point.x, point.y, compact ? 2.3 : 5, 0, Math.PI * 2);
     context.fill();
     context.stroke();
     context.restore();
   }
+  if (selected || moving) drawSelectionRing(point, moving);
 
-  if (
-    !showLabels && node.id !== simulation.graph.hill &&
-    node.id !== simulation.graph.food
-  ) return;
+  const endpoint = node.id === simulation.graph.hill || isFood;
+  if (!endpoint && (!showLabels || compact) && !selected) return;
 
+  const foodIndex = simulation.graph.foods.indexOf(node.id);
   const label = node.id === simulation.graph.hill
     ? "HILL"
-    : node.id === simulation.graph.food
-    ? "FOOD"
+    : isFood
+    ? simulation.graph.foods.length > 1 ? `FOOD ${foodIndex + 1}` : "FOOD"
     : String(node.id + 1).padStart(2, "0");
   context.save();
-  context.font = node.id === simulation.graph.hill ||
-      node.id === simulation.graph.food
+  context.font = endpoint
     ? "700 10px ui-monospace, monospace"
     : "600 9px ui-monospace, monospace";
   context.fillStyle = "#38454c";
@@ -447,6 +563,7 @@ const drawCanvas = (current) => {
       current.simulation,
       points[node.id],
       node.id === current.selectedNode,
+      node.id === current.movingFood,
       current.view.labels,
     )
   );
@@ -472,7 +589,10 @@ bindButton("new-graph", () => {
 });
 bindButton("load-seed", () => ({ type: "newGraph", seed: readSeed() }));
 bindButton("set-hill", () => ({ type: "endpoint", kind: "hill" }));
-bindButton("set-food", () => ({ type: "endpoint", kind: "food" }));
+bindButton("add-food", () => ({ type: "addFood" }));
+bindButton("move-food", () => ({ type: "beginFoodMove" }));
+bindButton("remove-food", () => ({ type: "removeFood" }));
+bindButton("cancel-food-move", () => ({ type: "cancelFoodMove" }));
 
 const sliderConfigs = [
   ["antCount", (value) => Number(value), (value) => `${value}`],
@@ -480,6 +600,7 @@ const sliderConfigs = [
   ["speed", (value) => Number(value) / 100, (value) => `${Number(value) / 100} u/s`],
   ["slowHalfLife", Number, (value) => `${value} s`],
   ["fastHalfLife", Number, (value) => `${value} s`],
+  ["slowAvoidance", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
   ["fastInfluence", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
   ["nodeCount", Number, (value) => `${value}`],
   ["density", (value) => Number(value) / 100, (value) => `${value}%`],
@@ -523,10 +644,28 @@ const closestNode = (clientX, clientY) => {
 canvas.addEventListener(
   "click",
   (event) =>
-    dispatch({ type: "select", node: closestNode(event.clientX, event.clientY) }),
+    dispatch({
+      type: "select",
+      node: closestNode(event.clientX, event.clientY),
+      place: true,
+    }),
 );
 
 canvas.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && model.movingFood !== null) {
+    event.preventDefault();
+    dispatch({ type: "cancelFoodMove" });
+    return;
+  }
+  if (
+    event.key === "Enter" &&
+    model.movingFood !== null &&
+    model.selectedNode !== null
+  ) {
+    event.preventDefault();
+    dispatch({ type: "placeFood", node: model.selectedNode });
+    return;
+  }
   if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
     return;
   }

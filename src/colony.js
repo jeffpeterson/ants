@@ -6,7 +6,7 @@ export const DEFAULTS = Object.freeze({
   speed: 0.17,
   slowHalfLife: 42,
   fastHalfLife: 9,
-  slowInfluence: 0.5,
+  slowAvoidance: 0.5,
   fastInfluence: 3.2,
   slowDeposit: 0.045,
   fastDeposit: 0.72,
@@ -29,14 +29,20 @@ const finiteOr = (fallback, value) =>
 export const sanitizeParams = (values = {}) => ({
   ...DEFAULTS,
   ...values,
-  nodeCount: Math.round(clamp(8, 36, finiteOr(DEFAULTS.nodeCount, values.nodeCount))),
+  nodeCount: Math.round(
+    clamp(8, 1_200, finiteOr(DEFAULTS.nodeCount, values.nodeCount)),
+  ),
   density: clamp(0.05, 0.9, finiteOr(DEFAULTS.density, values.density)),
   antCount: Math.round(clamp(8, 120, finiteOr(DEFAULTS.antCount, values.antCount))),
   scoutRate: clamp(0, 0.55, finiteOr(DEFAULTS.scoutRate, values.scoutRate)),
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
   slowHalfLife: clamp(5, 120, finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife)),
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
-  slowInfluence: clamp(0, 4, finiteOr(DEFAULTS.slowInfluence, values.slowInfluence)),
+  slowAvoidance: clamp(
+    0,
+    8,
+    finiteOr(DEFAULTS.slowAvoidance, values.slowAvoidance),
+  ),
   fastInfluence: clamp(0, 10, finiteOr(DEFAULTS.fastInfluence, values.fastInfluence)),
 });
 
@@ -61,61 +67,85 @@ export const edgeKey = (first, second) =>
 
 export const arcKey = (from, to) => `${from}>${to}`;
 
-const samplePoint = (seed) => {
-  const [[x, y], nextSeed] = randomPair(seed);
-  return [{ x: 0.07 + x * 0.86, y: 0.09 + y * 0.82 }, nextSeed];
+const gridShape = (count) => {
+  const columns = Math.ceil(Math.sqrt(count * 1.08));
+  return { columns, rows: Math.ceil(count / columns) };
 };
 
-const pointFarEnough = (points, point, minimumDistance) =>
-  points.every((other) => distance(other, point) >= minimumDistance);
-
-const findPoint = (points, seed, minimumDistance, attempt = 0) => {
-  const [point, nextSeed] = samplePoint(seed);
-  return pointFarEnough(points, point, minimumDistance) || attempt >= 72
-    ? [point, nextSeed]
-    : findPoint(points, nextSeed, minimumDistance * 0.992, attempt + 1);
-};
-
-const generateNodes = (count, seed) =>
-  Array.from({ length: count }).reduce(
+const generateNodes = (count, seed) => {
+  const shape = gridShape(count);
+  const generated = Array.from({ length: count }).reduce(
     ({ nodes, rngSeed }) => {
-      const minimumDistance = 0.105 * Math.sqrt(22 / count);
-      const [point, nextSeed] = findPoint(nodes, rngSeed, minimumDistance);
-      const node = { id: nodes.length, ...point };
+      const id = nodes.length;
+      const column = id % shape.columns;
+      const row = Math.floor(id / shape.columns);
+      const [[jitterX, jitterY], nextSeed] = randomPair(rngSeed);
+      const node = {
+        id,
+        x: 0.055 + ((column + 0.14 + jitterX * 0.72) / shape.columns) * 0.89,
+        y: 0.07 + ((row + 0.14 + jitterY * 0.72) / shape.rows) * 0.86,
+      };
       return { nodes: [...nodes, node], rngSeed: nextSeed };
     },
     { nodes: [], rngSeed: seed >>> 0 },
   );
+  return { ...generated, ...shape };
+};
 
-const completeEdges = (nodes) =>
-  nodes.flatMap((first, index) =>
-    nodes.slice(index + 1).map((second) => ({
-      id: edgeKey(first.id, second.id),
-      a: first.id,
-      b: second.id,
-      length: distance(first, second),
-    }))
+const makeEdge = (nodes, first, second) => ({
+  id: edgeKey(first, second),
+  a: Math.min(first, second),
+  b: Math.max(first, second),
+  length: distance(nodes[first], nodes[second]),
+});
+
+const spanningTree = (nodes, columns, seed) =>
+  nodes.slice(1).reduce(
+    ({ edges, rngSeed }, node) => {
+      const column = node.id % columns;
+      const row = Math.floor(node.id / columns);
+      const left = column > 0 ? node.id - 1 : null;
+      const above = row > 0 ? node.id - columns : null;
+      const [choice, nextSeed] = nextRandom(rngSeed);
+      const parent = left === null
+        ? above
+        : above === null
+        ? left
+        : choice < 0.5
+        ? left
+        : above;
+      return {
+        edges: [...edges, makeEdge(nodes, node.id, parent)],
+        rngSeed: nextSeed,
+      };
+    },
+    { edges: [], rngSeed: seed },
   );
 
-const crossesCut = (edge, visited) =>
-  visited.includes(edge.a) !== visited.includes(edge.b);
+const LOCAL_OFFSETS = Object.freeze([
+  [-1, 0],
+  [0, -1],
+  [-1, -1],
+  [1, -1],
+  [-2, 0],
+  [0, -2],
+]);
 
-const minimumSpanningTree = (nodes, candidates) => {
-  const grow = (visited, edges) => {
-    if (visited.length === nodes.length) return edges;
-
-    const nextEdge = candidates
-      .filter((edge) => crossesCut(edge, visited))
-      .reduce(
-        (shortest, edge) =>
-          !shortest || edge.length < shortest.length ? edge : shortest,
-        null,
-      );
-    const nextNode = visited.includes(nextEdge.a) ? nextEdge.b : nextEdge.a;
-    return grow([...visited, nextNode], [...edges, nextEdge]);
-  };
-
-  return grow([nodes[0].id], []);
+const localEdges = (nodes, columns) => {
+  const rows = Math.ceil(nodes.length / columns);
+  return nodes.flatMap((node) => {
+    const column = node.id % columns;
+    const row = Math.floor(node.id / columns);
+    return LOCAL_OFFSETS.flatMap(([columnOffset, rowOffset]) => {
+      const otherColumn = column + columnOffset;
+      const otherRow = row + rowOffset;
+      const otherId = otherRow * columns + otherColumn;
+      const valid = otherColumn >= 0 && otherColumn < columns &&
+        otherRow >= 0 && otherRow < rows &&
+        otherId >= 0 && otherId < nodes.length;
+      return valid ? [makeEdge(nodes, node.id, otherId)] : [];
+    });
+  });
 };
 
 const scoreCandidates = (candidates, seed) =>
@@ -143,25 +173,31 @@ const buildAdjacency = (nodes, edges) =>
     Object.fromEntries(nodes.map((node) => [node.id, []])),
   );
 
-const farthestPair = (nodes) =>
-  nodes
-    .flatMap((first, index) =>
-      nodes.slice(index + 1).map((second) => ({
-        first: first.id,
-        second: second.id,
-        distance: distance(first, second),
-      }))
-    )
-    .reduce((farthest, pair) => pair.distance > farthest.distance ? pair : farthest);
+const farthestFrom = (nodes, sourceId) =>
+  nodes.reduce((farthest, node) =>
+    distance(nodes[sourceId], node) > distance(nodes[sourceId], farthest)
+      ? node
+      : farthest
+  ).id;
+
+const farthestPair = (nodes) => {
+  const first = farthestFrom(nodes, nodes[0].id);
+  return { first, second: farthestFrom(nodes, first) };
+};
 
 export const generateGraph = (seed, values = {}) => {
   const params = sanitizeParams(values);
   const generated = generateNodes(params.nodeCount, seed);
-  const candidates = completeEdges(generated.nodes);
-  const tree = minimumSpanningTree(generated.nodes, candidates);
+  const connected = spanningTree(
+    generated.nodes,
+    generated.columns,
+    generated.rngSeed,
+  );
+  const tree = connected.edges;
   const treeIds = new Set(tree.map((edge) => edge.id));
-  const optional = candidates.filter((edge) => !treeIds.has(edge.id));
-  const scored = scoreCandidates(optional, generated.rngSeed);
+  const optional = localEdges(generated.nodes, generated.columns)
+    .filter((edge) => !treeIds.has(edge.id));
+  const scored = scoreCandidates(optional, connected.rngSeed);
   const extraCount = Math.min(
     optional.length,
     Math.round(params.nodeCount * (0.2 + params.density * 1.45)),
@@ -182,7 +218,7 @@ export const generateGraph = (seed, values = {}) => {
       adjacency: buildAdjacency(generated.nodes, edges),
       edgeById: Object.fromEntries(edges.map((edge) => [edge.id, edge])),
       hill: endpoints.first,
-      food: endpoints.second,
+      foods: [endpoints.second],
     },
     scored.rngSeed,
   ];
@@ -205,7 +241,11 @@ const routeLength = (graph, route) =>
     0,
   );
 
-export const shortestRoute = (graph, start = graph.hill, end = graph.food) => {
+export const shortestRoute = (
+  graph,
+  start = graph.hill,
+  end = graph.foods[0],
+) => {
   const nodeIds = graph.nodes.map(({ id }) => id);
   const initialDistances = Object.fromEntries(
     nodeIds.map((id) => [id, id === start ? 0 : Number.POSITIVE_INFINITY]),
@@ -251,6 +291,11 @@ export const shortestRoute = (graph, start = graph.hill, end = graph.food) => {
   return { route, distance: result.distances[end] };
 };
 
+export const shortestRouteToFood = (graph, start = graph.hill) =>
+  graph.foods
+    .map((food) => shortestRoute(graph, start, food))
+    .reduce((shortest, route) => route.distance < shortest.distance ? route : shortest);
+
 const emptyPheromones = (graph) => ({
   slow: Object.fromEntries(graph.edges.map((edge) => [edge.id, 0])),
   fast: Object.fromEntries(
@@ -294,7 +339,7 @@ export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
     graph.hill,
     graphRngSeed,
   );
-  const optimum = shortestRoute(graph);
+  const optimum = shortestRouteToFood(graph);
 
   return {
     graphSeed,
@@ -312,6 +357,8 @@ export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
       lastDistance: null,
       shortestDistance: optimum.distance,
       shortestRoute: optimum.route,
+      foodChanges: 0,
+      lastFoodChangeAt: null,
     },
   };
 };
@@ -343,11 +390,11 @@ const eligibleNeighbors = (ant, graph) => {
 const choiceWeight = (node, neighbor, pheromones, params) => {
   const slow = pheromones.slow[edgeKey(node, neighbor)] ?? 0;
   const fast = pheromones.fast[arcKey(node, neighbor)] ?? 0;
-  return (
-    params.baseWeight +
-    params.slowInfluence * Math.pow(slow, params.slowExponent) +
-    params.fastInfluence * Math.pow(fast, params.fastExponent)
-  );
+  const novelty = params.baseWeight /
+    (1 + params.slowAvoidance * Math.pow(slow, params.slowExponent));
+  const foodSignal = params.fastInfluence *
+    Math.pow(fast, params.fastExponent);
+  return novelty + foodSignal;
 };
 
 export const choiceProbabilities = (
@@ -469,23 +516,34 @@ const startEdge = (ant, graph, pheromones, params, seed) =>
     ? [startReturnEdge(ant, graph), seed]
     : startSearchEdge(ant, graph, pheromones, params, seed);
 
-const arriveSearching = (ant, graph) => {
-  const route = eraseLoop(ant.route, ant.edge.to);
-  const atFood = ant.edge.to === graph.food;
-  const tripDistance = atFood ? routeLength(graph, route) : 0;
+const beginReturn = (ant, graph, route) => {
+  const tripDistance = routeLength(graph, route);
   return {
     ant: {
       ...ant,
-      node: ant.edge.to,
+      node: route.at(-1),
       edge: null,
       route,
-      mode: atFood ? "return" : "search",
-      returnIndex: atFood ? route.length - 1 : null,
+      mode: "return",
+      returnIndex: route.length - 1,
       tripDistance,
     },
-    events: atFood ? [{ type: "discovery", route, distance: tripDistance }] : [],
+    events: [{
+      type: "discovery",
+      route,
+      distance: tripDistance,
+      food: route.at(-1),
+    }],
     deposits: [],
   };
+};
+
+const arriveSearching = (ant, graph) => {
+  const route = eraseLoop(ant.route, ant.edge.to);
+  const arrived = { ...ant, node: ant.edge.to, edge: null, route };
+  return graph.foods.includes(ant.edge.to)
+    ? beginReturn(arrived, graph, route)
+    : { ant: arrived, events: [], deposits: [] };
 };
 
 const arriveReturning = (ant, graph, params) => {
@@ -544,6 +602,28 @@ const advanceAnt = (
 ) => {
   if (dt <= EPSILON || crossings >= 8) {
     return { ant, seed, deposits: [], events: [] };
+  }
+
+  const discovered = ant.mode === "search" && ant.edge === null &&
+      graph.foods.includes(ant.node)
+    ? beginReturn(ant, graph, ant.route)
+    : null;
+  if (discovered) {
+    const continued = advanceAnt(
+      discovered.ant,
+      graph,
+      pheromones,
+      params,
+      seed,
+      dt,
+      crossings,
+    );
+    return {
+      ant: continued.ant,
+      seed: continued.seed,
+      deposits: continued.deposits,
+      events: [...discovered.events, ...continued.events],
+    };
   }
 
   const [movingAnt, nextSeed] = ant.edge
@@ -692,6 +772,8 @@ export const resetRun = (state) => {
       bestDistance: null,
       bestRoute: [],
       lastDistance: null,
+      foodChanges: 0,
+      lastFoodChangeAt: null,
     },
   };
 };
@@ -701,13 +783,77 @@ export const clearPheromones = (state) => ({
   pheromones: emptyPheromones(state.graph),
 });
 
+const hasNode = (graph, nodeId) => Object.hasOwn(graph.adjacency, nodeId);
+
+const sameNodes = (first, second) =>
+  first.length === second.length &&
+  first.every((node, index) => node === second[index]);
+
+const withFoodSources = (state, foods) => {
+  const uniqueFoods = [...new Set(foods)];
+  const validFoods = uniqueFoods.filter((node) =>
+    hasNode(state.graph, node) && node !== state.graph.hill
+  );
+  if (validFoods.length === 0 || sameNodes(validFoods, state.graph.foods)) {
+    return state;
+  }
+
+  const graph = { ...state.graph, foods: validFoods };
+  const optimum = shortestRouteToFood(graph);
+  return {
+    ...state,
+    graph,
+    stats: {
+      ...state.stats,
+      bestDistance: null,
+      bestRoute: [],
+      lastDistance: null,
+      shortestDistance: optimum.distance,
+      shortestRoute: optimum.route,
+      foodChanges: state.stats.foodChanges + 1,
+      lastFoodChangeAt: state.elapsed,
+    },
+  };
+};
+
+export const moveFood = (state, sourceId, destinationId) =>
+  state.graph.foods.includes(sourceId) &&
+    !state.graph.foods.includes(destinationId) &&
+    destinationId !== state.graph.hill &&
+    hasNode(state.graph, destinationId)
+    ? withFoodSources(
+      state,
+      state.graph.foods.map((food) => food === sourceId ? destinationId : food),
+    )
+    : state;
+
+export const addFood = (state, nodeId) =>
+  state.graph.foods.includes(nodeId) || nodeId === state.graph.hill ||
+    !hasNode(state.graph, nodeId)
+    ? state
+    : withFoodSources(state, [...state.graph.foods, nodeId]);
+
+export const removeFood = (state, nodeId) =>
+  state.graph.foods.length <= 1 || !state.graph.foods.includes(nodeId)
+    ? state
+    : withFoodSources(
+      state,
+      state.graph.foods.filter((food) => food !== nodeId),
+    );
+
 export const setEndpoint = (state, kind, nodeId) => {
-  const otherKind = kind === "hill" ? "food" : "hill";
-  if (!state.graph.adjacency[nodeId] || nodeId === state.graph[otherKind]) {
+  if (kind === "food") {
+    return moveFood(state, state.graph.foods[0], nodeId);
+  }
+  if (
+    kind !== "hill" ||
+    !hasNode(state.graph, nodeId) ||
+    state.graph.foods.includes(nodeId)
+  ) {
     return state;
   }
   const graph = { ...state.graph, [kind]: nodeId };
-  const optimum = shortestRoute(graph);
+  const optimum = shortestRouteToFood(graph);
   return resetRun({
     ...state,
     graph,
@@ -746,6 +892,7 @@ export const deriveMetrics = (state) => {
     efficiency: clamp(0, 1, efficiency),
     signalFocus: clamp(0, 1, signalFocus),
     returning: state.ants.filter((ant) => ant.mode === "return").length,
+    foods: state.graph.foods.length,
     scouts: state.ants.filter(
       (ant) => ant.scoutScore < state.params.scoutRate,
     ).length,

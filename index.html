@@ -38,7 +38,7 @@
             <h2 id="stage-heading">Graph field</h2>
           </div>
           <div class="legend" aria-label="Visualization legend">
-            <span><i class="legend-slow"></i>Slow trail</span>
+            <span><i class="legend-slow"></i>Coverage memory</span>
             <span><i class="legend-fast"></i>Food signal</span>
             <span><i class="legend-scout"></i>Scout</span>
           </div>
@@ -51,7 +51,11 @@
             role="img"
             aria-label="Random graph with ants traveling between an ant hill and food. Click a node to inspect it; arrow keys move the selection."
           ></canvas>
-          <div class="canvas-note" aria-hidden="true">CLICK A NODE TO INSPECT</div>
+          <div class="canvas-note">
+            <span id="canvas-note-text">CLICK A NODE TO INSPECT</span>
+            <button id="cancel-food-move" type="button" hidden>Cancel</button>
+          </div>
+          <p id="environment-status" class="sr-only" aria-live="polite"></p>
         </div>
 
         <div class="stage-footer">
@@ -68,6 +72,10 @@
             <div>
               <dt>Scouts</dt>
               <dd id="scout-count">0/0</dd>
+            </div>
+            <div>
+              <dt>Food sources</dt>
+              <dd id="food-count">1</dd>
             </div>
           </dl>
         </div>
@@ -143,8 +151,12 @@
           </div>
           <div class="slider-list">
             <label class="slider-row" for="slowHalfLife">
-              <span>Slow half-life <output id="slowHalfLife-value">42 s</output></span>
+              <span>Coverage half-life <output id="slowHalfLife-value">42 s</output></span>
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
+            </label>
+            <label class="slider-row" for="slowAvoidance">
+              <span>Coverage avoidance <output id="slowAvoidance-value">0.5×</output></span>
+              <input id="slowAvoidance" type="range" min="0" max="80" value="5">
             </label>
             <label class="slider-row" for="fastHalfLife">
               <span>Food half-life <output id="fastHalfLife-value">9 s</output></span>
@@ -165,7 +177,7 @@
           <div class="slider-list">
             <label class="slider-row" for="nodeCount">
               <span>Nodes <output id="nodeCount-value">24</output></span>
-              <input id="nodeCount" type="range" min="8" max="36" value="24">
+              <input id="nodeCount" type="range" min="8" max="1200" step="8" value="24">
             </label>
             <label class="slider-row" for="density">
               <span>Density <output id="density-value">42%</output></span>
@@ -191,7 +203,7 @@
             <h2 id="inspector-heading">Route probabilities</h2>
           </div>
           <p id="inspector-empty" class="muted">
-            Select any node in the graph to see a worker’s next-hop odds.
+            Select a node to inspect route odds, add food, or move a food source.
           </p>
           <div id="inspector-content" hidden>
             <div class="inspector-title">
@@ -199,11 +211,14 @@
                 <strong id="selected-title">Node 01</strong>
                 <small id="selected-meta">Junction · 3 connected edges</small>
               </div>
-              <div>
-                <button id="set-hill" class="text-button">Set hill</button>
-                <button id="set-food" class="text-button">Set food</button>
-              </div>
             </div>
+            <div class="inspector-actions">
+              <button id="set-hill" class="text-button">Set hill</button>
+              <button id="add-food" class="text-button">Add food here</button>
+              <button id="move-food" class="text-button" hidden>Move this food…</button>
+              <button id="remove-food" class="text-button" hidden>Remove food</button>
+            </div>
+            <p id="food-action-help" class="action-help"></p>
             <ol id="probabilities" class="probabilities"></ol>
           </div>
         </section>
@@ -218,16 +233,18 @@
           </summary>
           <div>
             <p>
-              Every crossing adds a slow, undirected trace. Successful ants
-              retrace their loop-free route and add a fast signal to the
-              <em>opposite</em> arc—the direction toward food. That deposit
-              grows stronger closer to food, preserving a readable gradient.
+              Every crossing marks an edge as explored, so searching workers
+              prefer less-covered ground. Successful ants retrace their
+              loop-free route and add a fast signal to the <em>opposite</em>
+              arc—the direction toward food. Fast attraction overrides slow
+              avoidance once a route succeeds.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
               Workers sample that distribution; scouts sample uniformly.
-              Short routes receive more deposits per minute because ants finish
-              more round trips. No ant knows the global shortest path.
+              Short routes receive more deposits per minute because equal-speed
+              ants finish more round trips. Add or move food and the old signal
+              will fade while the uninterrupted colony adapts.
             </p>
           </div>
         </details>
@@ -236,7 +253,7 @@
 
     <footer>
       <p>PURE CORE / SEEDED RANDOMNESS / LOCAL DECISIONS</p>
-      <p>FORMIC LAB · <span>slow memory + fast food signal</span></p>
+      <p>FORMIC LAB · <span>coverage avoidance + food attraction</span></p>
     </footer>
 
     <script type="module" src="./src/app.js"></script>
