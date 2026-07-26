@@ -8,6 +8,7 @@
       content="A functional ant-colony pathfinding playground with two pheromone fields."
     >
     <title>Formic — Ant Colony Pathfinding Lab</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
@@ -40,7 +41,7 @@
           <div class="legend" aria-label="Visualization legend">
             <span><i class="legend-slow"></i>Coverage → hill</span>
             <span><i class="legend-fast"></i>Food → food</span>
-            <span><i class="legend-scout"></i>Scout</span>
+            <span><i class="legend-explore"></i>Trying another way</span>
           </div>
         </div>
 
@@ -60,7 +61,7 @@
 
         <div class="stage-footer">
           <p id="stage-status">
-            Scouts are laying hillward breadcrumbs. Workers are waiting for food signal.
+            Exploring ants are laying hillward breadcrumbs. Others await food signal.
           </p>
           <dl>
             <div>
@@ -72,8 +73,8 @@
               <dd id="returning-count">0</dd>
             </div>
             <div>
-              <dt>Scouts</dt>
-              <dd id="scout-count">0/0</dd>
+              <dt>Exploring</dt>
+              <dd id="exploring-count">0/0</dd>
             </div>
             <div>
               <dt>Food sources</dt>
@@ -136,9 +137,9 @@
               <span>Ants <output id="antCount-value">64</output></span>
               <input id="antCount" type="range" min="8" max="120" value="64">
             </label>
-            <label class="slider-row" for="scoutRate">
-              <span>Scouts <output id="scoutRate-value">16%</output></span>
-              <input id="scoutRate" type="range" min="0" max="55" value="16">
+            <label class="slider-row" for="exploreRate">
+              <span>Explore chance <output id="exploreRate-value">10%</output></span>
+              <input id="exploreRate" type="range" min="0" max="30" value="10">
             </label>
             <label class="slider-row" for="speed">
               <span>Ant speed <output id="speed-value">0.17 u/s</output></span>
@@ -157,7 +158,7 @@
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
             </label>
             <label class="slider-row" for="slowAvoidance">
-              <span>Scout avoidance <output id="slowAvoidance-value">0.5×</output></span>
+              <span>Coverage avoidance <output id="slowAvoidance-value">0.5×</output></span>
               <input id="slowAvoidance" type="range" min="0" max="80" value="5">
             </label>
             <label class="slider-row" for="fastHalfLife">
@@ -202,10 +203,10 @@
         <section class="control-card inspector" aria-labelledby="inspector-heading">
           <div class="section-heading">
             <p class="eyebrow">NODE INSPECTOR</p>
-            <h2 id="inspector-heading">Route probabilities</h2>
+            <h2 id="inspector-heading">Food-trail odds</h2>
           </div>
           <p id="inspector-empty" class="muted">
-            Select a node to inspect route odds, add food, or move a food source.
+            Select a node to inspect food-following odds, add food, or move a food source.
           </p>
           <div id="inspector-content" hidden>
             <div class="inspector-title">
@@ -223,7 +224,7 @@
             <p id="food-action-help" class="action-help"></p>
             <ol id="probabilities" class="probabilities"></ol>
             <p id="probability-empty" class="muted">
-              No food signal here. A worker waits or follows its breadcrumbs home.
+              No usable food signal here. An ant waits or follows its breadcrumbs home.
             </p>
           </div>
         </section>
@@ -239,15 +240,18 @@
           <div>
             <p>
               Exploring ants mark the reverse arc of each crossing, creating a
-              local breadcrumb field toward the hill. Scouts prefer
-              less-covered edges; workers wait for and follow foodward signal.
+              local breadcrumb field toward the hill. Before food is known,
+              ants take turns making finite discovery tours on less-covered,
+              unvisited local edges. Others wait for foodward signal.
               A carrier follows adjacent hillward coverage along its own
               loop-free breadcrumbs and lays food signal on the opposite arc.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
-              Workers sample the foodward distribution; scouts sample the
-              least-covered local options.
+              On later trips every ant normally samples the foodward
+              distribution, but can briefly try a less-covered branch before
+              returning to the signal. Failed attempts retrace their own
+              breadcrumbs. There is no permanent scout caste.
               Short routes receive more deposits per minute because equal-speed
               ants finish more round trips. Add or move food and the old signal
               will fade while the uninterrupted colony adapts.

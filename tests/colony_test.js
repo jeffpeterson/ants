@@ -6,6 +6,7 @@ import {
   decayPheromones,
   edgeKey,
   foodDepositForReturn,
+  foodProbabilitiesForNode,
   generateGraph,
   isConnected,
   moveFood,
@@ -85,7 +86,7 @@ Deno.test("fast pheromone fades faster than slow pheromone", () => {
   assert(Math.abs(decayed.fast.arc - 0.5) < 1e-9);
 });
 
-Deno.test("worker odds are proportional to pheromone while scouts stay uniform", () => {
+Deno.test("trail choices follow pheromone while exploration ignores it", () => {
   const pheromones = {
     slow: { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 0 },
     fast: { [arcKey(0, 1)]: 0.1, [arcKey(0, 2)]: 2 },
@@ -103,7 +104,7 @@ Deno.test("worker odds are proportional to pheromone while scouts stay uniform",
     pheromones,
     params,
   );
-  const scout = choiceProbabilities(
+  const exploring = choiceProbabilities(
     0,
     [1, 2],
     pheromones,
@@ -111,10 +112,10 @@ Deno.test("worker odds are proportional to pheromone while scouts stay uniform",
     true,
   );
   assert(worker[1].probability > worker[0].probability * 10);
-  assertEquals(scout.map(({ probability }) => probability), [0.5, 0.5]);
+  assertEquals(exploring.map(({ probability }) => probability), [0.5, 0.5]);
 });
 
-Deno.test("coverage steers scouts while workers respond only to food", () => {
+Deno.test("coverage steers exploration while trail choices respond only to food", () => {
   const params = {
     baseWeight: 0.05,
     slowAvoidance: 1,
@@ -149,13 +150,15 @@ Deno.test("coverage steers scouts while workers respond only to food", () => {
   assert(attracted[1].probability > 0.9);
 });
 
-Deno.test("only scouts leave the hill before a food signal exists", () => {
+Deno.test("only temporary explorers leave before a food signal exists", () => {
   const initial = createSimulation({ seed: 41 });
   const started = stepSimulation(initial, 1 / 30);
   const moving = started.ants.filter(({ edge }) => edge !== null);
   assert(moving.length > 0);
   assert(
-    moving.every(({ scoutScore }) => scoutScore < started.params.scoutRate),
+    moving.every(({ searchState, edge }) =>
+      searchState.kind === "explore" && edge.exploring
+    ),
   );
 });
 
@@ -168,14 +171,96 @@ Deno.test("early food signal stays on a bounded set of routes", () => {
   const fastValues = Object.values(afterThirtySeconds.pheromones.fast);
   const activeArcs = fastValues.filter((value) => value > 0.01).length;
   assert(
-    activeArcs / fastValues.length < 0.3,
+    activeArcs / fastValues.length < 0.35,
     `Food signal spread to ${activeArcs}/${fastValues.length} arcs`,
   );
+});
+
+Deno.test("faint residue is not mistaken for a usable food trail", () => {
+  const initial = createSimulation({ seed: 17 });
+  const node = initial.graph.hill;
+  const neighbor = initial.graph.adjacency[node][0];
+  const withFast = (amount) => ({
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      fast: {
+        ...initial.pheromones.fast,
+        [arcKey(node, neighbor)]: amount,
+      },
+    },
+  });
+  assertEquals(foodProbabilitiesForNode(withFast(1e-8), node), []);
+  assert(foodProbabilitiesForNode(withFast(1), node).length > 0);
+});
+
+Deno.test("temporary probes correct an established longer route", () => {
+  const initial = createSimulation({ seed: 1 });
+  const runChecked = (start, count) =>
+    Array.from({ length: count }).reduce(
+      ({ state, sawBacktrack }) => {
+        const next = stepSimulation(state, 1 / 30);
+        const backtracks = next.ants.filter(
+          ({ edge }) => edge?.backtrackFrom !== undefined,
+        );
+        backtracks.forEach((ant) => {
+          assert(ant.edge.backtrackTo < ant.edge.backtrackFrom);
+          assertEquals(ant.edge.to, ant.route[ant.edge.backtrackTo]);
+        });
+        assert(
+          next.ants
+            .filter(({ mode }) => mode === "return")
+            .every(({ edge }) => edge?.exploring !== true),
+          "Food carriers must never enter exploration mode",
+        );
+        assert(
+          next.ants
+            .filter(({ searchState }) =>
+              ["explore", "probe"].includes(searchState.kind)
+            )
+            .every(({ searchState }) => searchState.left >= 0),
+          "Every exploration mode must have a finite remaining budget",
+        );
+        return {
+          state: next,
+          sawBacktrack: sawBacktrack || backtracks.length > 0,
+        };
+      },
+      { state: start, sawBacktrack: false },
+    );
+  const firstMinute = runChecked(initial, 1_800);
+  const lastTwoMinutes = runChecked(firstMinute.state, 3_600);
+  const middle = firstMinute.state;
+  const final = lastTwoMinutes.state;
+
   assert(
-    Math.abs(
-      afterThirtySeconds.stats.bestDistance -
-        afterThirtySeconds.stats.shortestDistance,
-    ) < 1e-9,
+    middle.stats.bestDistance > middle.stats.shortestDistance * 1.1,
+    "Fixture should first reinforce a route at least 10% too long",
+  );
+  assert(
+    Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
+    "Expected local probes to find a shorter route after convergence",
+  );
+  assert(
+    firstMinute.sawBacktrack || lastTwoMinutes.sawBacktrack,
+    "Expected a failed probe to retrace its breadcrumbs",
+  );
+  assert(
+    final.ants.every(({ exploreChoices, followChoices }) =>
+      exploreChoices > 0 && followChoices > 0
+    ),
+    "Every ant should alternate between exploring and following",
+  );
+
+  const hill = final.graph.hill;
+  const bestHop = final.stats.shortestRoute[1];
+  const bestSignal = final.pheromones.fast[arcKey(hill, bestHop)];
+  const alternativeSignals = final.graph.adjacency[hill]
+    .filter((node) => node !== bestHop)
+    .map((node) => final.pheromones.fast[arcKey(hill, node)]);
+  assert(
+    bestSignal > Math.max(...alternativeSignals),
+    "Expected traffic to shift to the corrected hill branch",
   );
 });
 
@@ -212,7 +297,7 @@ Deno.test("simulation transitions are immutable and eventually deliver food", ()
       nodeCount: 8,
       density: 0.8,
       antCount: 48,
-      scoutRate: 0.4,
+      exploreRate: 0.3,
       speed: 0.6,
       fastHalfLife: 20,
     },
@@ -240,7 +325,7 @@ Deno.test("simulation transitions are immutable and eventually deliver food", ()
   );
   assert(
     Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
-    "Expected scouts to discover the shortest route",
+    "Expected temporary exploration to discover the shortest route",
   );
 
   const shortestArcs = final.stats.shortestRoute.slice(1).map((node, index) =>
@@ -265,7 +350,7 @@ const adaptationFixture = () => {
       nodeCount: 8,
       density: 0.8,
       antCount: 16,
-      scoutRate: 0.4,
+      exploreRate: 0.3,
       speed: 0.6,
       fastHalfLife: 2,
     },

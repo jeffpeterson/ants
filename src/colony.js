@@ -2,7 +2,7 @@ export const DEFAULTS = Object.freeze({
   nodeCount: 24,
   density: 0.42,
   antCount: 64,
-  scoutRate: 0.16,
+  exploreRate: 0.1,
   speed: 0.17,
   slowHalfLife: 42,
   fastHalfLife: 9,
@@ -20,6 +20,12 @@ export const DEFAULTS = Object.freeze({
 
 const UINT32_RANGE = 4_294_967_296;
 const EPSILON = 1e-9;
+const EXPLORE_BURST_EDGES = 3;
+const DISCOVERY_MIN_EDGES = 24;
+const DISCOVERY_MEAN_EXTRA_EDGES = 32;
+const DISCOVERY_MAX_EDGES = 160;
+const WAIT_MIN_SECONDS = 5;
+const WAIT_SPAN_SECONDS = 15;
 
 export const clamp = (minimum, maximum, value) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -35,7 +41,11 @@ export const sanitizeParams = (values = {}) => ({
   ),
   density: clamp(0.05, 0.9, finiteOr(DEFAULTS.density, values.density)),
   antCount: Math.round(clamp(8, 120, finiteOr(DEFAULTS.antCount, values.antCount))),
-  scoutRate: clamp(0, 0.55, finiteOr(DEFAULTS.scoutRate, values.scoutRate)),
+  exploreRate: clamp(
+    0,
+    0.3,
+    finiteOr(DEFAULTS.exploreRate, values.exploreRate),
+  ),
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
   slowHalfLife: clamp(5, 120, finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife)),
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
@@ -305,7 +315,7 @@ const emptyPheromones = (graph) => ({
   ),
 });
 
-const makeAnt = (id, hill, scoutScore) => ({
+const makeAnt = (id, hill) => ({
   id,
   node: hill,
   edge: null,
@@ -313,21 +323,16 @@ const makeAnt = (id, hill, scoutScore) => ({
   route: [hill],
   returnIndex: null,
   tripDistance: 0,
-  scoutScore,
+  searchState: { kind: "unassigned" },
+  exploreChoices: 0,
+  followChoices: 0,
   trips: 0,
 });
 
-const generateAnts = (count, hill, seed, startId = 0) =>
-  Array.from({ length: count }).reduce(
-    ({ ants, rngSeed }, _, index) => {
-      const [scoutScore, nextSeed] = nextRandom(rngSeed);
-      return {
-        ants: [...ants, makeAnt(startId + index, hill, scoutScore)],
-        rngSeed: nextSeed,
-      };
-    },
-    { ants: [], rngSeed: seed },
-  );
+const generateAnts = (count, hill, seed, startId = 0) => ({
+  ants: Array.from({ length: count }, (_, index) => makeAnt(startId + index, hill)),
+  rngSeed: seed,
+});
 
 export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
   const params = sanitizeParams(values);
@@ -379,22 +384,45 @@ export const decayPheromones = (pheromones, params, dt) => ({
 
 const previousNode = (ant) => ant.route.length > 1 ? ant.route.at(-2) : null;
 
-const eligibleNeighbors = (ant, graph) => {
-  return graph.adjacency[ant.node];
+const eligibleNeighbors = (ant, graph, exploring) => {
+  const neighbors = graph.adjacency[ant.node];
+  if (!exploring) return neighbors;
+  const unvisited = neighbors.filter((node) => !ant.route.includes(node));
+  return unvisited.length > 0 ? unvisited : neighbors;
 };
 
 const coverageOnEdge = (node, neighbor, pheromones) =>
   (pheromones.slow[arcKey(node, neighbor)] ?? 0) +
   (pheromones.slow[arcKey(neighbor, node)] ?? 0);
 
-const choiceWeight = (node, neighbor, pheromones, params, scout) => {
+const choiceWeight = (node, neighbor, pheromones, params, exploring) => {
   const coverage = coverageOnEdge(node, neighbor, pheromones);
   const fast = pheromones.fast[arcKey(node, neighbor)] ?? 0;
   const novelty = params.baseWeight /
     (1 + params.slowAvoidance * Math.pow(coverage, params.slowExponent));
   const foodSignal = params.fastInfluence *
     Math.pow(fast, params.fastExponent);
-  return scout ? novelty : params.baseWeight + foodSignal;
+  return exploring ? novelty : params.baseWeight + foodSignal;
+};
+
+const foodSignalWeight = (node, neighbor, pheromones, params) =>
+  params.fastInfluence *
+  Math.pow(
+    pheromones.fast[arcKey(node, neighbor)] ?? 0,
+    params.fastExponent,
+  );
+
+const hasUsableFoodSignal = (node, neighbors, pheromones, params) =>
+  neighbors.some((neighbor) =>
+    foodSignalWeight(node, neighbor, pheromones, params) >= params.baseWeight
+  );
+
+const discoveryBudget = (random, exploreRate) => {
+  const fraction = clamp(0, 1 - EPSILON, random / exploreRate);
+  const extra = Math.floor(
+    -Math.log(1 - fraction) * DISCOVERY_MEAN_EXTRA_EDGES,
+  );
+  return Math.min(DISCOVERY_MAX_EDGES, DISCOVERY_MIN_EDGES + extra);
 };
 
 export const choiceProbabilities = (
@@ -402,12 +430,12 @@ export const choiceProbabilities = (
   neighbors,
   pheromones,
   params,
-  scout = false,
+  exploring = false,
   discouragedNode = null,
 ) => {
   if (neighbors.length === 0) return [];
   const weights = neighbors.map((neighbor) =>
-    choiceWeight(node, neighbor, pheromones, params, scout) *
+    choiceWeight(node, neighbor, pheromones, params, exploring) *
     (neighbor === discouragedNode ? params.reversePenalty : 1)
   );
   const total = weights.reduce((sum, weight) => sum + weight, 0);
@@ -429,15 +457,21 @@ const choose = (probabilities, random) =>
     { chosen: null, remaining: random },
   ).chosen ?? probabilities.at(-1).node;
 
-const chooseNextNode = (ant, graph, pheromones, params, seed) => {
-  const neighbors = eligibleNeighbors(ant, graph);
-  const scout = ant.scoutScore < params.scoutRate;
+const chooseNextNode = (
+  ant,
+  graph,
+  pheromones,
+  params,
+  exploring,
+  seed,
+) => {
+  const neighbors = eligibleNeighbors(ant, graph, exploring);
   const probabilities = choiceProbabilities(
     ant.node,
     neighbors,
     pheromones,
     params,
-    scout,
+    exploring,
     previousNode(ant),
   );
   const [random, nextSeed] = nextRandom(seed);
@@ -497,26 +531,146 @@ export const foodDepositForReturn = (
 };
 
 const startSearchEdge = (ant, graph, pheromones, params, seed) => {
-  const scout = ant.scoutScore < params.scoutRate;
-  const neighbors = eligibleNeighbors(ant, graph);
-  const hasFoodSignal = neighbors.some((neighbor) =>
-    (pheromones.fast[arcKey(ant.node, neighbor)] ?? 0) > EPSILON
+  const neighbors = graph.adjacency[ant.node];
+  const hasFoodSignal = hasUsableFoodSignal(
+    ant.node,
+    neighbors,
+    pheromones,
+    params,
   );
-  const homewardFallback = previousNode(ant);
-  if (!scout && !hasFoodSignal && homewardFallback === null) {
-    return [ant, seed];
+  const routeIndex = ant.route.length - 1;
+
+  const [assignedState, assignedSeed] = ant.searchState.kind === "unassigned"
+    ? hasFoodSignal ? [{ kind: "follow" }, seed] : (() => {
+      const [random, nextSeed] = nextRandom(seed);
+      const waitFraction = (random - params.exploreRate) /
+        (1 - params.exploreRate);
+      return [
+        random < params.exploreRate
+          ? {
+            kind: "explore",
+            left: discoveryBudget(random, params.exploreRate),
+          }
+          : {
+            kind: "wait",
+            left: WAIT_MIN_SECONDS + waitFraction * WAIT_SPAN_SECONDS,
+          },
+        nextSeed,
+      ];
+    })()
+    : ant.searchState.kind === "wait" && hasFoodSignal
+    ? [{ kind: "follow" }, seed]
+    : [ant.searchState, seed];
+
+  const rejoinedState = assignedState.kind === "explore" && hasFoodSignal
+    ? { kind: "follow" }
+    : assignedState;
+  const discoveryState = rejoinedState.kind === "explore" &&
+      rejoinedState.left === 0
+    ? routeIndex > 0 ? { kind: "backtrack", target: 0 } : { kind: "unassigned" }
+    : rejoinedState;
+  const expiredState = discoveryState.kind === "probe" &&
+      discoveryState.left === 0
+    ? hasFoodSignal
+      ? { kind: "follow" }
+      : routeIndex > discoveryState.anchor
+      ? { kind: "backtrack", target: discoveryState.anchor }
+      : { kind: "follow" }
+    : discoveryState;
+  const searchState = expiredState.kind === "backtrack" &&
+      routeIndex <= expiredState.target
+    ? { kind: "follow" }
+    : expiredState;
+  const readyAnt = { ...ant, searchState };
+
+  if (searchState.kind === "wait" && !hasFoodSignal) {
+    return [readyAnt, assignedSeed];
   }
-  const [to, nextSeed] = !scout && !hasFoodSignal
-    ? [homewardFallback, seed]
-    : chooseNextNode(ant, graph, pheromones, params, seed);
+
+  if (searchState.kind === "backtrack") {
+    const to = previousNode(readyAnt);
+    return [
+      {
+        ...readyAnt,
+        edge: {
+          from: readyAnt.node,
+          to,
+          progress: 0,
+          length: graph.edgeById[edgeKey(readyAnt.node, to)].length,
+          exploring: false,
+          backtrackFrom: routeIndex,
+          backtrackTo: routeIndex - 1,
+        },
+      },
+      assignedSeed,
+    ];
+  }
+
+  if (searchState.kind === "follow" && !hasFoodSignal) {
+    if (ant.node === graph.hill) {
+      return startSearchEdge(
+        { ...readyAnt, searchState: { kind: "unassigned" } },
+        graph,
+        pheromones,
+        params,
+        assignedSeed,
+      );
+    }
+    return startSearchEdge(
+      {
+        ...readyAnt,
+        searchState: { kind: "backtrack", target: 0 },
+      },
+      graph,
+      pheromones,
+      params,
+      assignedSeed,
+    );
+  }
+
+  const [nextSearchState, exploring, choiceSeed] = searchState.kind === "explore"
+    ? [{ ...searchState, left: searchState.left - 1 }, true, assignedSeed]
+    : searchState.kind === "probe"
+    ? [
+      { ...searchState, left: searchState.left - 1 },
+      true,
+      assignedSeed,
+    ]
+    : (() => {
+      const [random, nextSeed] = nextRandom(assignedSeed);
+      return random < params.exploreRate
+        ? [
+          {
+            kind: "probe",
+            left: EXPLORE_BURST_EDGES - 1,
+            anchor: routeIndex,
+          },
+          true,
+          nextSeed,
+        ]
+        : [{ kind: "follow" }, false, nextSeed];
+    })();
+
+  const [to, nextSeed] = chooseNextNode(
+    readyAnt,
+    graph,
+    pheromones,
+    params,
+    exploring,
+    choiceSeed,
+  );
   return [
     {
-      ...ant,
+      ...readyAnt,
+      searchState: nextSearchState,
+      exploreChoices: readyAnt.exploreChoices + Number(exploring),
+      followChoices: readyAnt.followChoices + Number(!exploring),
       edge: {
-        from: ant.node,
+        from: readyAnt.node,
         to,
         progress: 0,
-        length: graph.edgeById[edgeKey(ant.node, to)].length,
+        length: graph.edgeById[edgeKey(readyAnt.node, to)].length,
+        exploring,
       },
     },
     nextSeed,
@@ -572,6 +726,7 @@ const beginReturn = (ant, graph, route) => {
       edge: null,
       route,
       mode: "return",
+      searchState: { kind: "follow" },
       returnIndex: route.length - 1,
       tripDistance,
     },
@@ -587,7 +742,14 @@ const beginReturn = (ant, graph, route) => {
 
 const arriveSearching = (ant, graph) => {
   const route = eraseLoop(ant.route, ant.edge.to);
-  const arrived = { ...ant, node: ant.edge.to, edge: null, route };
+  const atHill = ant.edge.to === graph.hill;
+  const arrived = {
+    ...ant,
+    node: ant.edge.to,
+    edge: null,
+    route,
+    searchState: atHill ? { kind: "unassigned" } : ant.searchState,
+  };
   return graph.foods.includes(ant.edge.to)
     ? beginReturn(arrived, graph, route)
     : { ant: arrived, events: [], deposits: [] };
@@ -616,6 +778,7 @@ const arriveReturning = (ant, graph, params) => {
         ...arrived,
         mode: "search",
         route: [graph.hill],
+        searchState: { kind: "unassigned" },
         returnIndex: null,
         tripDistance: 0,
         trips: ant.trips + 1,
@@ -675,6 +838,38 @@ const advanceAnt = (
       deposits: continued.deposits,
       events: [...discovered.events, ...continued.events],
     };
+  }
+
+  const waiting = ant.mode === "search" &&
+    ant.edge === null &&
+    ant.searchState.kind === "wait" &&
+    !hasUsableFoodSignal(
+      ant.node,
+      graph.adjacency[ant.node],
+      pheromones,
+      params,
+    );
+  if (waiting && dt + EPSILON < ant.searchState.left) {
+    return {
+      ant: {
+        ...ant,
+        searchState: { ...ant.searchState, left: ant.searchState.left - dt },
+      },
+      seed,
+      deposits: [],
+      events: [],
+    };
+  }
+  if (waiting) {
+    return advanceAnt(
+      { ...ant, searchState: { kind: "unassigned" } },
+      graph,
+      pheromones,
+      params,
+      seed,
+      Math.max(0, dt - ant.searchState.left),
+      crossings,
+    );
   }
 
   const [movingAnt, nextSeed] = ant.edge
@@ -952,23 +1147,28 @@ export const deriveMetrics = (state) => {
     signalFocus: clamp(0, 1, signalFocus),
     returning: state.ants.filter((ant) => ant.mode === "return").length,
     foods: state.graph.foods.length,
-    scouts: state.ants.filter(
-      (ant) => ant.scoutScore < state.params.scoutRate,
+    exploring: state.ants.filter(
+      (ant) =>
+        ant.mode === "search" &&
+        (["explore", "probe"].includes(ant.searchState.kind) ||
+          ant.edge?.exploring === true),
     ).length,
   };
 };
 
-export const probabilitiesForAntAtNode = (state, nodeId, scout = false) => {
+export const foodProbabilitiesForNode = (state, nodeId) => {
   const neighbors = state.graph.adjacency[nodeId] ?? [];
-  const hasFoodSignal = neighbors.some((neighbor) =>
-    (state.pheromones.fast[arcKey(nodeId, neighbor)] ?? 0) > EPSILON
+  const hasFoodSignal = hasUsableFoodSignal(
+    nodeId,
+    neighbors,
+    state.pheromones,
+    state.params,
   );
-  if (!scout && !hasFoodSignal) return [];
+  if (!hasFoodSignal) return [];
   return choiceProbabilities(
     nodeId,
     neighbors,
     state.pheromones,
     state.params,
-    scout,
   ).toSorted((first, second) => second.probability - first.probability);
 };

@@ -4,8 +4,8 @@ import {
   clearPheromones,
   createSimulation,
   deriveMetrics,
+  foodProbabilitiesForNode,
   moveFood,
-  probabilitiesForAntAtNode,
   removeFood,
   resetRun,
   setEndpoint,
@@ -172,7 +172,7 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "Scouts are laying hillward breadcrumbs. Workers are waiting for food signal.";
+    return "Exploring ants are laying hillward breadcrumbs. Others await food signal.";
   }
   if (metrics.deliveries === 0) {
     return "Food found. Returning ants are laying a directed signal.";
@@ -194,7 +194,10 @@ const renderMetrics = (current) => {
   setText("best-hops", metrics.bestDistance === null ? "—" : metrics.bestHops);
   setText("efficiency", formatPercent(metrics.efficiency));
   setText("signal-focus", formatPercent(metrics.signalFocus));
-  setText("scout-count", `${metrics.scouts}/${current.simulation.ants.length}`);
+  setText(
+    "exploring-count",
+    `${metrics.exploring}/${current.simulation.ants.length}`,
+  );
   setText("food-count", metrics.foods);
   setText("stage-status", statusCopy(current, metrics));
   setText("runtime", `${current.simulation.elapsed.toFixed(1)} s`);
@@ -250,7 +253,7 @@ const renderInspector = (current) => {
       simulation.graph.foods.length === 1
     ? "Move the last food source instead of removing it."
     : "";
-  const rows = probabilitiesForAntAtNode(simulation, selectedNode)
+  const rows = foodProbabilitiesForNode(simulation, selectedNode)
     .map(probabilityRow);
   byId("probabilities").replaceChildren(...rows);
   byId("probability-empty").hidden = rows.length > 0;
@@ -544,11 +547,13 @@ const antPoint = (ant, points) =>
     ? pointAlong(points[ant.edge.from], points[ant.edge.to], ant.edge.progress)
     : points[ant.node];
 
-const drawAnt = (ant, points, simulation) => {
+const drawAnt = (ant, points) => {
   const point = antPoint(ant, points);
   const target = ant.edge ? points[ant.edge.to] : point;
   const angle = Math.atan2(target.y - point.y, target.x - point.x);
-  const scout = ant.scoutScore < simulation.params.scoutRate;
+  const exploring = ant.mode === "search" &&
+    (["explore", "probe"].includes(ant.searchState.kind) ||
+      ant.edge?.exploring === true);
   context.save();
   context.translate(point.x, point.y);
   context.rotate(angle);
@@ -559,7 +564,7 @@ const drawAnt = (ant, points, simulation) => {
   context.beginPath();
   context.arc(2.4, 0, 1.8, 0, Math.PI * 2);
   context.fill();
-  if (scout) {
+  if (exploring) {
     context.strokeStyle = "#e75b2a";
     context.lineWidth = 1.2;
     context.beginPath();
@@ -593,9 +598,7 @@ const drawCanvas = (current) => {
   );
   if (current.view.ants) {
     const limit = size.width < 620 ? 72 : current.simulation.ants.length;
-    current.simulation.ants.slice(0, limit).forEach((ant) =>
-      drawAnt(ant, points, current.simulation)
-    );
+    current.simulation.ants.slice(0, limit).forEach((ant) => drawAnt(ant, points));
   }
 };
 
@@ -620,7 +623,7 @@ bindButton("cancel-food-move", () => ({ type: "cancelFoodMove" }));
 
 const sliderConfigs = [
   ["antCount", (value) => Number(value), (value) => `${value}`],
-  ["scoutRate", (value) => Number(value) / 100, (value) => `${value}%`],
+  ["exploreRate", (value) => Number(value) / 100, (value) => `${value}%`],
   ["speed", (value) => Number(value) / 100, (value) => `${Number(value) / 100} u/s`],
   ["slowHalfLife", Number, (value) => `${value} s`],
   ["fastHalfLife", Number, (value) => `${value} s`],
