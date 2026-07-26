@@ -1,4 +1,5 @@
 const root = new URL("./", import.meta.url);
+const hostname = "0.0.0.0";
 const port = 4173;
 
 const types: Readonly<Record<string, string>> = Object.freeze({
@@ -44,5 +45,5 @@ const responseFor = async (request: Request) => {
   }
 };
 
-console.log(`Formic lab running at http://localhost:${port}`);
-Deno.serve({ port }, responseFor);
+console.log(`Formic lab running at http://${hostname}:${port}`);
+Deno.serve({ hostname, port }, responseFor);
