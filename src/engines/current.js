@@ -771,11 +771,11 @@ const unwalkedNeighbors = (ant, graph, pheromones) =>
 const escapeProbabilities = (ant, graph, pheromones, params) => {
   const neighbors = graph.adjacency[ant.node];
   const here = pheromones.slow[ant.node] ?? 0;
-  const uphill = neighbors.filter((neighbor) =>
+  const homeward = neighbors.filter((neighbor) =>
     (pheromones.slow[neighbor] ?? 0) > here + EPSILON
   );
-  const options = uphill.length > 0
-    ? uphill
+  const options = homeward.length > 0
+    ? homeward
     : neighbors.includes(ant.previous)
     ? [ant.previous]
     : neighbors;

@@ -272,7 +272,7 @@ const reduceModel = (current, action) => {
         ? {
           ...current,
           selectedNode: action.node,
-          notice: "Choose a junction that is not the hill or another food source.",
+          notice: "Choose a junction that is not home or another food source.",
         }
         : {
           ...current,
@@ -392,13 +392,13 @@ const renderInspector = (current) => {
   const engine = getEngine(simulation.engineId);
   const moving = current.movingFood !== null;
   const role = selectedNode === simulation.graph.hill
-    ? "Ant hill"
+    ? "Colony home"
     : isFood
     ? "Food source"
     : "Junction";
   setText("selected-title", `Node ${String(selectedNode + 1).padStart(2, "0")}`);
   setText("selected-meta", `${role} · ${degree} connected edges`);
-  byId("set-hill").disabled = moving ||
+  byId("set-home").disabled = moving ||
     selectedNode === simulation.graph.hill || isFood;
   byId("add-food").hidden = !engine.capabilities.multipleFoods || moving || isFood ||
     selectedNode === simulation.graph.hill;
@@ -434,7 +434,7 @@ const renderInterface = (current) => {
     "aria-label",
     moving
       ? "Select a junction as the new food destination. Press Escape to cancel."
-      : "Random graph with ants traveling between an ant hill and food. Click a node to inspect it; arrow keys move the selection.",
+      : "Random graph with ants traveling between their home and food. Click a node to inspect it; arrow keys move the selection.",
   );
 };
 
@@ -595,7 +595,7 @@ const drawTrailSegment = (segment, points) =>
     trailStyle(segment.channel),
   );
 
-const drawHill = (point) => {
+const drawHome = (point) => {
   context.save();
   context.translate(point.x, point.y);
   context.fillStyle = "#fffaf0";
@@ -665,7 +665,7 @@ const drawNode = (
   const isActiveFood = activeFoods.includes(node.id);
   const compact = simulation.graph.nodes.length > 180;
   if (node.id === simulation.graph.hill) {
-    drawHill(point);
+    drawHome(point);
   } else if (isFood) {
     drawFood(point, isActiveFood);
   } else {
@@ -686,7 +686,7 @@ const drawNode = (
 
   const foodIndex = simulation.graph.foods.indexOf(node.id);
   const label = node.id === simulation.graph.hill
-    ? "HILL"
+    ? "HOME"
     : isFood
     ? !isActiveFood
       ? `PARKED ${foodIndex + 1}`
@@ -788,7 +788,7 @@ bindButton("new-graph", () => {
   return { type: "newGraph", seed };
 });
 bindButton("load-seed", () => ({ type: "newGraph", seed: readSeed() }));
-bindButton("set-hill", () => ({ type: "endpoint", kind: "hill" }));
+bindButton("set-home", () => ({ type: "endpoint", kind: "hill" }));
 bindButton("add-food", () => ({ type: "addFood" }));
 bindButton("move-food", () => ({ type: "beginFoodMove" }));
 bindButton("remove-food", () => ({ type: "removeFood" }));
@@ -799,7 +799,13 @@ const conciseNumber = (value) => Number(Number(value).toFixed(2)).toString();
 const polarityLabel = (value) => {
   const scaled = Number(value) / 10;
   if (scaled === 0) return "ignore";
-  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "descend" : "climb"}`;
+  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "lower" : "higher"}`;
+};
+
+const homePolarityLabel = (value) => {
+  const scaled = Number(value) / 10;
+  if (scaled === 0) return "ignore";
+  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "away" : "homeward"}`;
 };
 
 const influenceLabel = (value) => `${conciseNumber(Number(value) / 10)}×`;
@@ -837,7 +843,7 @@ const sliderConfigs = [
   [
     "exploreSignalBias",
     (value) => Number(value) / 10,
-    polarityLabel,
+    homePolarityLabel,
     (value) => value * 10,
   ],
   [
@@ -909,7 +915,7 @@ const sliderConfigs = [
   [
     "returnSlowPolarity",
     (value) => Number(value) / 10,
-    polarityLabel,
+    homePolarityLabel,
     (value) => value * 10,
   ],
   ["slowHalfLife", Number, durationLabel, (value) => value],

@@ -12,7 +12,7 @@ Graph shape, ant count, and speed are environmental resources, not algorithm qua
 Optimization therefore holds ant count and speed fixed and evaluates every candidate on
 the same seeded maps. Let:
 
-- `L*` be the shortest hill-to-food distance;
+- `L*` be the shortest home-to-food distance;
 - `v` be ant speed;
 - `N` be ant count; and
 - `u = L* / v` be one ideal one-way travel time.
@@ -33,7 +33,7 @@ The scorecard has five independently reported dimensions:
 
 A static scenario runs for `32u`; throughput is measured over `[20u, 32u]`. A moving
 food scenario warms for `24u`, moves food to a topologically distant node of comparable
-hill distance, then runs for another `24u`.
+home distance, then runs for another `24u`.
 
 Each dimension is aggregated across maps as:
 
@@ -62,23 +62,23 @@ only after a time-step audit; final validation uses the browser's `1/60 s` step.
 The point prediction below is intentionally specific. It is a hypothesis, not a new
 default:
 
-| Parameter                      | Current | Predicted best | Reason                                                                                                     |
-| ------------------------------ | ------: | -------------: | ---------------------------------------------------------------------------------------------------------- |
-| Enter scouting                 |    0.02 |           0.03 | A small continuing exploration budget should repair stale routes without dissolving recruitment.           |
-| Stop scouting                  |  0.12/s |         0.16/s | Multi-edge random walks should last long enough to leave a branch but usually rejoin a discovered trail.   |
-| Persistent bias while scouting |       0 |           -1.2 | Mild avoidance should spread search traffic into less-covered branches.                                    |
-| Unmarked branch floor          |      0% |           100% | The base term is already small; enabling it fully should permit rare correction without swamping a trail.  |
-| U-turn weight                  |    0.18 |           0.15 | Immediate reversals waste distance, but a nonzero escape probability prevents trapping.                    |
-| Straight-ahead bias            |     1.6 |            1.2 | Local geometry is useful, but a strong heading preference can skip a good side branch.                     |
-| Short-edge bias                |     1.0 |            1.3 | Short edges should increase lap frequency and favor shorter routes without becoming deterministic.         |
-| Outbound food pull             |     3.2 |            4.0 | Once a route exists, moderate concentration-following should produce stable recruitment.                   |
-| Outbound food polarity         |       0 |           -1.5 | Carrier deposits are fresher nearer the hill, so descending the local food gradient may point toward food. |
-| Homebound food pull            |     1.0 |            0.5 | Food concentration is expected to be less reliable than the hill-sourced persistent field for homing.      |
-| Homebound persistent pull      |     8.0 |            8.0 | Strong attraction to the shared hill field should reduce return wandering.                                 |
-| Homebound food polarity        |       0 |              0 | Food slope may conflict with homing and is predicted to add little.                                        |
-| Homebound persistent polarity  |     4.0 |            4.0 | The persistent field attenuates away from the hill, making a strong climb locally meaningful.              |
-| Persistent half-life           |    42 s |           70 s | The hill field should survive long enough to cover large maps and bridge sparse traffic.                   |
-| Food half-life                 |     9 s |            8 s | Rapid decay should shed obsolete routes while still permitting reinforcement.                              |
+| Parameter                      | Current | Predicted best | Reason                                                                                                    |
+| ------------------------------ | ------: | -------------: | --------------------------------------------------------------------------------------------------------- |
+| Enter scouting                 |    0.02 |           0.03 | A small continuing exploration budget should repair stale routes without dissolving recruitment.          |
+| Stop scouting                  |  0.12/s |         0.16/s | Multi-edge random walks should last long enough to leave a branch but usually rejoin a discovered trail.  |
+| Persistent bias while scouting |       0 |           -1.2 | Mild avoidance should spread search traffic into less-covered branches.                                   |
+| Unmarked branch floor          |      0% |           100% | The base term is already small; enabling it fully should permit rare correction without swamping a trail. |
+| U-turn weight                  |    0.18 |           0.15 | Immediate reversals waste distance, but a nonzero escape probability prevents trapping.                   |
+| Straight-ahead bias            |     1.6 |            1.2 | Local geometry is useful, but a strong heading preference can skip a good side branch.                    |
+| Short-edge bias                |     1.0 |            1.3 | Short edges should increase lap frequency and favor shorter routes without becoming deterministic.        |
+| Outbound food pull             |     3.2 |            4.0 | Once a route exists, moderate concentration-following should produce stable recruitment.                  |
+| Outbound food polarity         |       0 |           -1.5 | Carrier deposits are fresher nearer home, so descending the local food gradient may point toward food.    |
+| Homebound food pull            |     1.0 |            0.5 | Food concentration is expected to be less reliable than the home-sourced persistent field for homing.     |
+| Homebound persistent pull      |     8.0 |            8.0 | Strong attraction to the shared home field should reduce return wandering.                                |
+| Homebound food polarity        |       0 |              0 | Food slope may conflict with homing and is predicted to add little.                                       |
+| Homebound persistent polarity  |     4.0 |            4.0 | The persistent field attenuates away from home, making its local slope meaningful.                        |
+| Persistent half-life           |    42 s |           70 s | The home field should survive long enough to cover large maps and bridge sparse traffic.                  |
+| Food half-life                 |     9 s |            8 s | Rapid decay should shed obsolete routes while still permitting reinforcement.                             |
 
 ### Interaction hypotheses
 
@@ -113,7 +113,7 @@ selecting slider values:
    playground deliberately permits multi-edge random walks after an ant enters scouting.
 4. **Undirected edge food pheromone will probably improve route identification and is
    now an explicit countermodel.** Classical ant-colony optimization commonly stores
-   pheromone per edge. A hybrid can retain the scalar node-based persistent hill field
+   pheromone per edge. A hybrid can retain the scalar node-based persistent home field
    while putting the food trail on undirected edges. An ant would still read only its
    incident options, and the stored signal would contain no direction. This model must
    beat the node model on held-out effectiveness—not merely produce a cleaner-looking
@@ -253,7 +253,7 @@ Evaluation version 3 instead makes two local changes:
    exists. The new uncharted-priority lever controls that reduction. With all adjacent
    endpoints charted, the default scout samples randomly apart from the existing U-turn
    penalty.
-2. Carriers ignore the food field by default and climb only the persistent hill field.
+2. Carriers ignore the food field by default and follow only the persistent home field.
    This removes a conflicting cue without adding a route, visited set, stored direction,
    coordinate, or graph-wide query.
 
@@ -291,17 +291,17 @@ The current overrides relative to the first promoted preset are:
 | Homebound food pull       |          `1.10` |       0 |
 | Homebound food polarity   | `1.40×` descend |  ignore |
 
-## Hill-potential and local-interaction hypotheses
+## Home-potential and local-interaction hypotheses
 
 The next iteration changes the information model before retuning its numeric controls.
 These predictions are recorded before aggregate benchmarking:
 
-1. Pinning the hill at `1` and accepting only attenuated destination improvements will
+1. Pinning home at `1` and accepting only attenuated destination improvements will
    eliminate persistent local maxima and prevent short loops from amplifying the home
    field.
 2. Increasing the persistent half-life by roughly two orders of magnitude over the food
    half-life will improve sparse-field homing without preserving stale food routes.
-3. Persistent edge coverage plus finite escape-to-hill will reduce time spent in
+3. Persistent edge coverage plus finite escape-to-home will reduce time spent in
    cul-de-sacs; a threshold near two locally exhausted choices should balance coverage
    and premature returns.
 4. Food deposition accepted only on strictly homeward persistent-field moves will
@@ -313,8 +313,8 @@ These predictions are recorded before aggregate benchmarking:
    intermediate probability may adapt better after food moves than unconditional
    joining.
 
-The causal candidates are hill-only, hill plus escape, hill plus food-progress gating,
-hill plus both, and cautious/balanced/eager social variants. Promotion requires all
+The causal candidates are home-only, home plus escape, home plus food-progress gating,
+home plus both, and cautious/balanced/eager social variants. Promotion requires all
 local invariants to pass, no increase in stranded or no-delivery runs, improved
 homebound progress, and better paired cycle efficiency on held-out maps. Aggregate score
 remains secondary to those mechanism-specific checks.

@@ -111,7 +111,7 @@ export const createPlaygroundSimulation = ({
 
 export const engineSwitchNotice = (engine) => {
   const reset =
-    "The graph, hill, and placed food were preserved; ants and trails reset.";
+    "The graph, home, and placed food were preserved; ants and trails reset.";
   const singleFood = engine.id === "A0"
     ? " A0 follows the first food only, parks the others, and resets again when that food moves."
     : "";

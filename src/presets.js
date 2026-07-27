@@ -30,7 +30,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
   builtIn(
     "balanced-node",
     "Balanced node trails",
-    "Working scalar-trail default with uncharted-biased scouting and hill-only homing.",
+    "Working scalar-trail default with unwalked-edge scouting and home-field homing.",
   ),
   builtIn(
     "adaptive-edge",

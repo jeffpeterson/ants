@@ -7,7 +7,7 @@
   --muted: #657078;
   --line: #cfc8b5;
   --line-dark: #aaa38f;
-  --hill: #e75b2a;
+  --home: #e75b2a;
   --food: #96b83f;
   --slow: #c58b2a;
   --fast: #087f8c;
@@ -84,7 +84,7 @@ summary:focus-visible {
   content: "";
   position: absolute;
   border-radius: 50%;
-  background: var(--hill);
+  background: var(--home);
 }
 
 .brand-mark::before {
@@ -256,7 +256,7 @@ h2 {
 .legend .legend-explore {
   width: 8px;
   height: 8px;
-  border: 2px solid var(--hill);
+  border: 2px solid var(--home);
   background: var(--ink);
 }
 

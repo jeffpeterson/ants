@@ -22,7 +22,7 @@
         <h1>Routes emerge. No map required.</h1>
         <p>
           Watch a colony turn local chemical signals into a shared route from
-          hill to food.
+          home to food.
         </p>
       </div>
       <div class="header-readout">
@@ -50,7 +50,7 @@
             id="colony-canvas"
             tabindex="0"
             role="img"
-            aria-label="Random graph with ants traveling between an ant hill and food. Click a node to inspect it; arrow keys move the selection."
+            aria-label="Random graph with ants traveling between their home and food. Click a node to inspect it; arrow keys move the selection."
           ></canvas>
           <div class="canvas-note">
             <span id="canvas-note-text">CLICK A NODE TO INSPECT</span>
@@ -205,7 +205,7 @@
                 value="2">
             </label>
             <label class="slider-row signal-persistent" for="exploreSignalBias">
-              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="exploreSignalBias-value">2× descend</output></span>
+              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="exploreSignalBias-value">2× away</output></span>
               <input id="exploreSignalBias" type="range" min="-40" max="40" step="0.1"
                 value="-20">
             </label>
@@ -256,7 +256,7 @@
                 value="45.6">
             </label>
             <label class="slider-row signal-food" for="outboundPolarity">
-              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="outboundPolarity-value">0.78× climb</output></span>
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="outboundPolarity-value">0.78× higher</output></span>
               <input id="outboundPolarity" type="range" min="-40" max="40" step="0.1"
                 value="7.8">
             </label>
@@ -284,7 +284,7 @@
                 value="0">
             </label>
             <label class="slider-row signal-persistent" for="returnSlowPolarity">
-              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="returnSlowPolarity-value">4.0× climb</output></span>
+              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="returnSlowPolarity-value">4.0× homeward</output></span>
               <input id="returnSlowPolarity" type="range" min="-40" max="40" step="0.1"
                 value="40">
             </label>
@@ -385,7 +385,7 @@
               </div>
             </div>
             <div class="inspector-actions">
-              <button id="set-hill" class="text-button">Set hill</button>
+              <button id="set-home" class="text-button">Set home</button>
               <button id="add-food" class="text-button">Add food here</button>
               <button id="move-food" class="text-button" hidden>Move this food…</button>
               <button id="remove-food" class="text-button" hidden>Remove food</button>

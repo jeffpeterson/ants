@@ -149,7 +149,7 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
   );
 });
 
-Deno.test("the hill remains the sole anchored persistent source", () => {
+Deno.test("home remains the sole anchored persistent source", () => {
   const initial = createSimulation({ seed: 19 });
   const faded = {
     ...initial,
@@ -169,7 +169,7 @@ Deno.test("the hill remains the sole anchored persistent source", () => {
   );
 });
 
-Deno.test("the first outbound trail is already uphill toward the hill", () => {
+Deno.test("the first outbound trail already increases toward home", () => {
   let state = createSimulation({
     seed: 19,
     params: { antCount: 8, speed: 0.65 },
@@ -194,7 +194,7 @@ Deno.test("the first outbound trail is already uphill toward the hill", () => {
       state.graph.adjacency[id].some((neighbor) =>
         state.pheromones.slow[neighbor] > state.pheromones.slow[id]
       ),
-      `Node ${id} lacks an uphill neighbor`,
+      `Node ${id} lacks a higher home-potential neighbor`,
     )
   );
 });
@@ -231,7 +231,7 @@ Deno.test("stale carried values cannot inject persistent signal", () => {
   assertEquals(stepped.pheromones.slow[stepped.graph.hill], 1);
 });
 
-Deno.test("every persistent mark retains a strictly uphill neighbor", () => {
+Deno.test("every persistent mark retains a higher home-potential neighbor", () => {
   let state = createSimulation({
     seed: 93,
     params: { antCount: 48, speed: 0.65 },
@@ -445,7 +445,7 @@ Deno.test("a scout treats its incoming edge as walked immediately", () => {
   assertEquals(choices.map(({ probability }) => probability), [0, 1]);
 });
 
-Deno.test("the blocked-choice threshold starts strictly uphill escape", () => {
+Deno.test("the blocked-choice threshold starts strictly homeward escape", () => {
   const initial = createSimulation({
     seed: 29,
     params: {
@@ -459,9 +459,9 @@ Deno.test("the blocked-choice threshold starts strictly uphill escape", () => {
     !initial.graph.foods.includes(id) &&
     initial.graph.adjacency[id].length > 1
   ).id;
-  const uphill = initial.graph.adjacency[node][0];
+  const homeward = initial.graph.adjacency[node][0];
   const slow = Object.fromEntries(
-    initial.graph.nodes.map(({ id }) => [id, id === uphill ? 0.8 : 0.1]),
+    initial.graph.nodes.map(({ id }) => [id, id === homeward ? 0.8 : 0.1]),
   );
   slow[initial.graph.hill] = 1;
   slow[node] = 0.4;
@@ -491,11 +491,11 @@ Deno.test("the blocked-choice threshold starts strictly uphill escape", () => {
   assertEquals(atThreshold.edge.escaping, true);
   assert(
     slow[atThreshold.edge.to] > slow[node],
-    "Escape must choose a strictly uphill endpoint",
+    "Escape must choose a strictly higher home-potential endpoint",
   );
 });
 
-Deno.test("escape ends and resets only at the hill", () => {
+Deno.test("escape ends and resets only at home", () => {
   const initial = createSimulation({
     seed: 31,
     params: { antCount: 8, speed: 0.65 },
@@ -531,7 +531,7 @@ Deno.test("escape ends and resets only at the hill", () => {
   assertEquals(stepped.ants[0].blockedChoices, 0);
 });
 
-Deno.test("default carriers ignore food signal and climb the hill field", () => {
+Deno.test("default carriers ignore food signal and follow the home field", () => {
   const pheromones = {
     slow: { 0: 0.2, 1: 1, 2: 0.1 },
     fast: { 0: 0.1, 1: 0, 2: 100 },

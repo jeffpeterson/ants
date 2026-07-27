@@ -1,7 +1,7 @@
 # Formic
 
 Formic is a browser-based ant-colony pathfinding playground. A seeded random graph gives
-ants a hill, one or more food sources, and competing routes. Food can move while the
+ants a home, one or more food sources, and competing routes. Food can move while the
 colony is running so obsolete signals visibly fade as the ants adapt. The simulation has
 a pure functional core and a small imperative canvas/DOM shell.
 
@@ -50,12 +50,12 @@ speed without changing algorithm behavior.
 The colony stores a scalar persistent level at every node and a bounded coverage mark on
 every undirected edge:
 
-- The hill is the sole fixed source at level `1`.
+- Home is the sole fixed source at level `1`.
 - A searching traversal `u → v` can propose only `persistent[u] × exp(-2 × edge.length)`
   at `v`.
 - The destination keeps the maximum of its decayed level and that attenuated proposal. A
   loop therefore cannot amplify itself, and the initial outbound trail already rises
-  toward the hill rather than depending on deposit freshness.
+  toward home rather than depending on deposit freshness.
 
 Food pheromone is deposited only by an ant that has picked up food. A playground lever
 stores it either as scalar node levels or on undirected edges; both live fields are
@@ -69,10 +69,10 @@ renderer interpolates endpoint levels along the edge and can draw their current 
 visibleSlope(field, u, v) = level[field, v] - level[field, u]
 ```
 
-That slope is a visualization, not an instruction. A carrier deposits later near the
-hill, so freshness can make food concentration rise hillward. In edge mode, option
-`u → v` instead reads the single scalar on undirected edge `{u,v}` and food polarity has
-no effect because the edge stores no direction.
+That slope is a visualization, not an instruction. A carrier deposits later near home,
+so freshness can make food concentration rise homeward. In edge mode, option `u → v`
+instead reads the single scalar on undirected edge `{u,v}` and food polarity has no
+effect because the edge stores no direction.
 
 Pheromone marks stay visually static between simulation updates so the ants are the only
 moving marks on the graph.
@@ -105,29 +105,29 @@ values permit rare local error correction without putting an ant into scouting m
 Outbound and homebound ants have independent attraction and polarity settings. Setting
 an attraction or polarity control to zero removes that cue. At food, an ant reverses its
 incoming edge once, then resumes local choices; it does not retrace a stored path. The
-default carrier ignores the food field and climbs only the persistent hill field. This
+default carrier ignores the food field and follows only the persistent home field. This
 avoids reinforcing a mistaken food-marked branch during return.
 
 Every ant starts in scouting mode. Later, an independent enter-scouting chance can
 switch a follower back into it. When an incident edge has no persistent coverage mark,
 the default scout prefers those unwalked options. Unwalked-edge priority can soften that
 preference. Scouts otherwise descend the endpoint-derived persistent slope by default,
-so exploration tends away from the hill while homing climbs the same field.
+so exploration tends away from home while homing follows increasing levels.
 
 An explorer counts consecutive junctions without an unwalked non-reverse edge. At the
 configured limit—or by an adjustable per-second chance while locally blocked—it enters
-escape mode and strictly climbs the persistent field to the hill. The ant stores only
+escape mode and strictly follows increasing persistent levels home. The ant stores only
 that small counter, one mode bit, and its incoming edge; it has no route or visited set.
 Escape traffic does not refresh persistent coverage.
 
 ## Current-engine invariants
 
-- Persistent pheromone is one scalar hill potential per node plus one bounded coverage
+- Persistent pheromone is one scalar home potential per node plus one bounded coverage
   mark per undirected edge. Food pheromone is either one scalar per node or per
   undirected edge. None stores direction; renderer arrows derive only from endpoint
   slopes.
-- The hill is pinned to `1`; every accepted non-hill persistent write is attenuated from
-  the live level at the edge's other endpoint. Persistent traffic is never additive.
+- Home is pinned to `1`; every accepted non-home persistent write is attenuated from the
+  live level at the edge's other endpoint. Persistent traffic is never additive.
 - Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
   do.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
@@ -149,7 +149,7 @@ Escape traffic does not refresh persistent coverage.
 ## Historical engines
 
 The engine selector runs seven behavior-changing revisions, A0–A4 and B0–B1, inside the
-latest playground. Switching engines preserves the exact current graph, hill, and placed
+latest playground. Switching engines preserves the exact current graph, home, and placed
 food, but resets ants and trails because their state schemas are incompatible.
 Historical source files are byte-checked against their Git blobs.
 
@@ -176,7 +176,7 @@ This is an algorithmic synthesis rather than a claim that every ant species beha
 way. [Dussutour et al.](https://pubmed.ncbi.nlm.nih.gov/19617426/) report a long-lasting
 exploration pheromone with weak recruitment and a short-lived food trail with strong
 recruitment in _Pheidole megacephala_. The persistent field here plays that
-shared-network role and also supplies the hill potential needed by a deliberately
+shared-network role and also supplies the home potential needed by a deliberately
 pheromone-only graph model.
 
 Straight pheromone need not encode polarity.
@@ -210,7 +210,7 @@ map presets remain separate in browser storage. Loading a preset for the active 
 preserves live ants and trails; loading a preset for another engine performs the same
 graph-preserving colony reset as the engine selector.
 
-The active engine, its parameters, deterministic map recipe, hill, and food locations
+The active engine, its parameters, deterministic map recipe, home, and food locations
 are also encoded in the URL hash for reproducible sharing. All simulation functions
 return new state, seeded randomness is threaded through each transition, and the
 renderer only reads snapshots.
