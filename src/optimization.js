@@ -2,6 +2,7 @@ import {
   clamp,
   createSimulation,
   DEFAULTS,
+  deriveMetrics,
   edgeKey,
   moveFood,
   nextRandom,
@@ -9,8 +10,18 @@ import {
   stepSimulation,
 } from "./colony.js";
 import { ALGORITHM_KEYS } from "./config.js";
+import { antStateCountsFor } from "./presentation.js";
 
-export const EVALUATION_VERSION = 5;
+export const EVALUATION_VERSION = 6;
+export const DEFAULT_EVALUATION_RUNS = 1;
+const RUN_SEED_STRIDE = 0x9e3779b9;
+const ANT_STATES = Object.freeze([
+  "following",
+  "scouting",
+  "frontier",
+  "escaping",
+  "carrying",
+]);
 
 export const OPTIMIZED_KEYS = Object.freeze([
   "exploreRate",
@@ -396,6 +407,28 @@ export const STRESS_SCENARIOS = Object.freeze([
   scenario("stress-maximum", 4_000_009, 5_000_047, 1_200, 0.9, 1),
 ]);
 
+export const repeatScenarios = (
+  scenarios,
+  runs = DEFAULT_EVALUATION_RUNS,
+) => {
+  const count = Number.isFinite(Number(runs))
+    ? Math.max(1, Math.floor(Number(runs)))
+    : DEFAULT_EVALUATION_RUNS;
+  return scenarios.flatMap((scenarioValue) =>
+    Array.from(
+      { length: count },
+      (_, run) => ({
+        ...scenarioValue,
+        run: run + 1,
+        runSeed: (
+          scenarioValue.runSeed +
+          Math.imul(run, RUN_SEED_STRIDE)
+        ) >>> 0,
+      }),
+    )
+  );
+};
+
 const shortestDistances = (graph, source) =>
   Array.from({ length: graph.nodes.length }).reduce(
     ({ distances, unvisited }) => {
@@ -448,11 +481,32 @@ export const adaptationDestination = (graph) => {
   )[0];
 };
 
+const emptyActivity = () => ({
+  seconds: 0,
+  states: Object.fromEntries(ANT_STATES.map((state) => [state, 0])),
+});
+
+const emptyObservation = () => ({
+  activity: emptyActivity(),
+  coherence: [],
+  returnChoices: { signal: 0, random: 0 },
+});
+
+const returnChoices = (simulation) =>
+  simulation.ants.reduce(
+    (choices, ant) => ({
+      signal: choices.signal + (ant.returnSignalChoices ?? 0),
+      random: choices.random + (ant.returnRandomChoices ?? 0),
+    }),
+    { signal: 0, random: 0 },
+  );
+
 const emptyTrace = (simulation) => ({
   simulation,
   active: {},
   pickups: [],
   cycles: [],
+  observation: emptyObservation(),
   invalid: false,
 });
 
@@ -490,13 +544,63 @@ const observeEvent = (trace, event, time) => {
   };
 };
 
-const observeStep = (trace, simulation) =>
-  simulation.lastEvents.reduce(
-    (current, event) => observeEvent(current, event, simulation.elapsed),
-    { ...trace, simulation },
-  );
+const observeActivity = (activity, simulation, seconds) => {
+  const counts = antStateCountsFor(simulation);
+  return {
+    seconds: activity.seconds + seconds,
+    states: Object.fromEntries(
+      ANT_STATES.map((state) => [
+        state,
+        activity.states[state] + counts[state] * seconds,
+      ]),
+    ),
+  };
+};
 
-const runTrace = (trace, until, dt) => {
+const observeWindow = (observation, before, after, window) => {
+  if (window === undefined) return observation;
+  const start = Math.max(before.elapsed, window.start);
+  const end = Math.min(after.elapsed, window.end);
+  const overlap = Math.max(0, end - start);
+  if (overlap <= 0) return observation;
+  const beforeChoices = returnChoices(before);
+  const afterChoices = returnChoices(after);
+  const samples = window.samples.filter((time) =>
+    time > before.elapsed + 1e-9 &&
+    time <= after.elapsed + 1e-9
+  );
+  return {
+    activity: observeActivity(observation.activity, after, overlap),
+    coherence: [
+      ...observation.coherence,
+      ...samples.map(() => trailCoherence(after)),
+    ],
+    returnChoices: {
+      signal: observation.returnChoices.signal +
+        afterChoices.signal - beforeChoices.signal,
+      random: observation.returnChoices.random +
+        afterChoices.random - beforeChoices.random,
+    },
+  };
+};
+
+const observeStep = (trace, simulation, window) => {
+  return simulation.lastEvents.reduce(
+    (current, event) => observeEvent(current, event, simulation.elapsed),
+    {
+      ...trace,
+      simulation,
+      observation: observeWindow(
+        trace.observation,
+        trace.simulation,
+        simulation,
+        window,
+      ),
+    },
+  );
+};
+
+const runTrace = (trace, until, dt, window) => {
   const count = Math.max(
     0,
     Math.ceil((until - trace.simulation.elapsed) / dt - 1e-9),
@@ -505,9 +609,22 @@ const runTrace = (trace, until, dt) => {
     const remaining = until - current.simulation.elapsed;
     if (remaining <= 1e-9) return current;
     const next = stepSimulation(current.simulation, Math.min(dt, remaining));
-    return observeStep(current, next);
+    return observeStep(current, next, window);
   }, trace);
 };
+
+const resetObservation = (trace) => ({
+  ...trace,
+  observation: emptyObservation(),
+});
+
+const sampleTimes = (start, end, interval) =>
+  Array.from(
+    { length: Math.floor((end - start) / interval + 1e-9) + 1 },
+    (_, index) => Math.min(end, start + index * interval),
+  ).concat(end).filter((time, index, times) =>
+    index === 0 || Math.abs(time - times[index - 1]) > 1e-9
+  );
 
 const mean = (values) =>
   values.length === 0
@@ -566,6 +683,29 @@ const geometricMean = (weighted) =>
     ) / weighted.reduce((sum, { weight }) => sum + weight, 0),
   );
 
+const activityHealth = (observation, antCount) => {
+  const seconds = observation.activity.seconds;
+  const denominator = antCount * seconds;
+  const states = Object.fromEntries(
+    ANT_STATES.map((state) => [
+      state,
+      denominator <= 0 ? 0 : observation.activity.states[state] / denominator,
+    ]),
+  );
+  return {
+    seconds,
+    states,
+    productive: states.following + states.carrying,
+  };
+};
+
+const trailCoherence = (simulation) => {
+  const metrics = deriveMetrics(simulation);
+  return Math.sqrt(metrics.signalFocus * metrics.efficiency);
+};
+
+const meanCoherence = (observation) => mean(observation.coherence);
+
 export const evaluateScenario = (
   values,
   scenarioValue,
@@ -590,22 +730,53 @@ export const evaluateScenario = (
   const oldUnit = oldDistance / resources.speed;
   const warmEnd = horizons.warmUnits * oldUnit;
   const staticEnd = horizons.staticUnits * oldUnit;
-  const warm = runTrace(emptyTrace(initial), warmEnd, dt);
-  const completed = runTrace(warm, staticEnd, dt);
+  const steadyStart = horizons.steadyStartUnits * oldUnit;
+  const steadySampleTimes = sampleTimes(
+    steadyStart,
+    staticEnd,
+    horizons.binUnits * oldUnit,
+  );
+  const staticWindow = {
+    start: steadyStart,
+    end: staticEnd,
+    samples: steadySampleTimes,
+  };
+  const warm = runTrace(
+    emptyTrace(initial),
+    warmEnd,
+    dt,
+    staticWindow,
+  );
+  const completed = runTrace(warm, staticEnd, dt, staticWindow);
 
   const destination = adaptationDestination(initial.graph);
   const distances = shortestDistances(initial.graph, initial.graph.hill);
   const newDistance = distances[destination];
   const newUnit = newDistance / resources.speed;
-  const moved = {
+  const moved = resetObservation({
     ...warm,
     simulation: moveFood(warm.simulation, oldFood, destination),
-  };
+  });
   const adaptationEnd = warmEnd + horizons.adaptationUnits * newUnit;
-  const adapted = runTrace(moved, adaptationEnd, dt);
+  const lateAdaptationStart = adaptationEnd -
+    horizons.lateAdaptationUnits * newUnit;
+  const adaptedSampleTimes = sampleTimes(
+    lateAdaptationStart,
+    adaptationEnd,
+    horizons.binUnits * newUnit,
+  );
+  const adapted = runTrace(
+    moved,
+    adaptationEnd,
+    dt,
+    {
+      start: lateAdaptationStart,
+      end: adaptationEnd,
+      samples: adaptedSampleTimes,
+    },
+  );
 
   const firstPickup = completed.pickups.find(({ food }) => food === oldFood);
-  const steadyStart = horizons.steadyStartUnits * oldUnit;
   const steadyCycles = completedWithin(
     completed.cycles,
     oldFood,
@@ -691,6 +862,33 @@ export const evaluateScenario = (
     const unit = pickup.food === destination ? newUnit : oldUnit;
     return adaptationEnd - pickup.pickupAt > horizons.discoveryUnits * unit;
   });
+  const steadyActivity = activityHealth(
+    completed.observation,
+    resources.antCount,
+  );
+  const adaptedActivity = activityHealth(
+    adapted.observation,
+    resources.antCount,
+  );
+  const steadyParticipation = new Set(
+    steadyCycles.map(({ antId }) => antId),
+  ).size / resources.antCount;
+  const adaptedLateCycles = completedWithin(
+    adapted.cycles,
+    destination,
+    lateAdaptationStart,
+    adaptationEnd,
+  );
+  const adaptedParticipation = new Set(
+    adaptedLateCycles.map(({ antId }) => antId),
+  ).size / resources.antCount;
+  const coherenceSteady = meanCoherence(completed.observation);
+  const coherenceAdapted = meanCoherence(adapted.observation);
+  const returnSignalChoices = completed.observation.returnChoices.signal +
+    adapted.observation.returnChoices.signal;
+  const returnRandomChoices = completed.observation.returnChoices.random +
+    adapted.observation.returnChoices.random;
+  const returnChoiceCount = returnSignalChoices + returnRandomChoices;
 
   const metrics = {
     discovery: normalizedLatency(
@@ -704,7 +902,20 @@ export const evaluateScenario = (
     homing: eligiblePickups.length === 0 ? 0 : homed.length / eligiblePickups.length,
     adaptation,
   };
-  const finite = Object.values(metrics).every(Number.isFinite);
+  const health = {
+    productiveUtilization: Math.sqrt(
+      steadyActivity.productive * adaptedActivity.productive,
+    ),
+    cycleParticipation: Math.sqrt(
+      steadyParticipation * adaptedParticipation,
+    ),
+    trailCoherence: Math.sqrt(coherenceSteady * coherenceAdapted),
+    signaledHoming: returnChoiceCount === 0
+      ? 0
+      : returnSignalChoices / returnChoiceCount,
+  };
+  const finite = [...Object.values(metrics), ...Object.values(health)]
+    .every(Number.isFinite);
   const invalid = completed.invalid || adapted.invalid || !finite ||
     staticThroughput.raw > staticThroughput.maximum + 0.001 ||
     preThroughput.raw > preThroughput.maximum + 0.001 ||
@@ -722,6 +933,7 @@ export const evaluateScenario = (
     shortestDistance: oldDistance,
     newShortestDistance: newDistance,
     metrics,
+    health,
     diagnostics: {
       firstPickupAt: firstPickup?.pickupAt ?? null,
       steadyDeliveries: steadyCycles.length,
@@ -733,6 +945,16 @@ export const evaluateScenario = (
       preThroughput: preThroughput.value,
       lateThroughput: lateThroughput.value,
       overdueCargo: overdue.length,
+      productiveSteady: steadyActivity.productive,
+      productiveAdapted: adaptedActivity.productive,
+      cycleParticipationSteady: steadyParticipation,
+      cycleParticipationAdapted: adaptedParticipation,
+      stateSharesSteady: steadyActivity.states,
+      stateSharesAdapted: adaptedActivity.states,
+      coherenceSteady,
+      coherenceAdapted,
+      returnSignalChoices,
+      returnRandomChoices,
     },
     failures: {
       noPickup: firstPickup === undefined,
@@ -756,20 +978,28 @@ const percentile = (values, fraction) => {
 
 const robust = (values) => 0.7 * mean(values) + 0.3 * percentile(values, 0.1);
 
-export const aggregateEvaluation = (scenarios) => {
-  const dimensions = Object.fromEntries(
-    ["discovery", "throughput", "efficiency", "homing", "adaptation"].map(
-      (key) => [key, robust(scenarios.map(({ metrics }) => metrics[key]))],
-    ),
-  );
-  const failureRates = Object.fromEntries(
-    ["noPickup", "noDelivery", "noAdaptDelivery", "stranded", "invalid"].map(
-      (key) => [
-        key,
-        mean(scenarios.map(({ failures }) => Number(failures[key]))),
-      ],
-    ),
-  );
+const METRIC_KEYS = Object.freeze([
+  "discovery",
+  "throughput",
+  "efficiency",
+  "homing",
+  "adaptation",
+]);
+const HEALTH_KEYS = Object.freeze([
+  "productiveUtilization",
+  "cycleParticipation",
+  "trailCoherence",
+  "signaledHoming",
+]);
+const FAILURE_KEYS = Object.freeze([
+  "noPickup",
+  "noDelivery",
+  "noAdaptDelivery",
+  "stranded",
+  "invalid",
+]);
+
+const scoreFrom = (dimensions, failureRates) => {
   const base = geometricMean([
     { value: dimensions.discovery, weight: 0.15 },
     { value: dimensions.throughput, weight: 0.25 },
@@ -783,10 +1013,76 @@ export const aggregateEvaluation = (scenarios) => {
       3 * failureRates.noAdaptDelivery -
       2 * failureRates.stranded,
   ) * (failureRates.invalid > 0 ? 0 : 1);
+  return 100 * base * penalty;
+};
+
+const scenarioScore = ({ metrics, failures }) =>
+  scoreFrom(
+    metrics,
+    Object.fromEntries(
+      FAILURE_KEYS.map((key) => [key, Number(failures[key])]),
+    ),
+  );
+
+const groupRuns = (scenarios) =>
+  scenarios.reduce((groups, scenario, index) => {
+    const key = scenario.seed ?? `${scenario.id ?? "scenario"}:${index}`;
+    const current = groups.find((group) => group.key === key);
+    return current === undefined
+      ? [...groups, { key, runs: [scenario] }]
+      : groups.map((group) =>
+        group.key === key ? { ...group, runs: [...group.runs, scenario] } : group
+      );
+  }, []);
+
+export const aggregateEvaluation = (scenarios) => {
+  const dimensions = Object.fromEntries(
+    METRIC_KEYS.map(
+      (key) => [key, robust(scenarios.map(({ metrics }) => metrics[key]))],
+    ),
+  );
+  const health = Object.fromEntries(
+    HEALTH_KEYS.map((key) => [
+      key,
+      robust(scenarios.map((scenario) => scenario.health?.[key] ?? 0)),
+    ]),
+  );
+  const failureRates = Object.fromEntries(
+    FAILURE_KEYS.map(
+      (key) => [
+        key,
+        mean(scenarios.map(({ failures }) => Number(failures[key]))),
+      ],
+    ),
+  );
+  const groups = groupRuns(scenarios);
+  const scoreRanges = groups.map(({ runs }) => {
+    const scores = runs.map(scenarioScore);
+    return {
+      minimum: Math.min(...scores),
+      maximum: Math.max(...scores),
+    };
+  });
+  const failureGraphRates = Object.fromEntries(
+    FAILURE_KEYS.map((key) => [
+      key,
+      mean(
+        groups.map(({ runs }) => Number(runs.some(({ failures }) => failures[key]))),
+      ),
+    ]),
+  );
   return {
-    score: 100 * base * penalty,
+    score: scoreFrom(dimensions, failureRates),
     dimensions,
+    health,
     failureRates,
+    failureGraphRates,
+    seedFloorScore: robust(scoreRanges.map(({ minimum }) => minimum)),
+    seedScoreSpread: mean(
+      scoreRanges.map(({ minimum, maximum }) => maximum - minimum),
+    ),
+    runCount: scenarios.length,
+    graphCount: groups.length,
   };
 };
 

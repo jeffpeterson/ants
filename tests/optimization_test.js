@@ -14,6 +14,7 @@ import {
   measureThroughput,
   PARAMETER_SPECS,
   refineCandidates,
+  repeatScenarios,
   VALIDATION_SCENARIOS,
 } from "../src/optimization.js";
 import { createSimulation } from "../src/colony.js";
@@ -48,6 +49,22 @@ Deno.test("confirmation scenarios are fresh, deterministic, and immutable", () =
     assert(Object.isFrozen(scenario.graph));
     assert(!validationSeeds.has(scenario.seed));
     assert(!validationSeeds.has(scenario.runSeed));
+  });
+});
+
+Deno.test("scenario repeats are deterministic and preserve each base run", () => {
+  const source = VALIDATION_SCENARIOS.slice(0, 2);
+  const first = repeatScenarios(source, 3);
+  const second = repeatScenarios(source, 3);
+
+  assertEquals(first, second);
+  assertEquals(first.length, 6);
+  assertEquals(repeatScenarios(source, Number.NaN).length, source.length);
+  source.forEach((scenario, graph) => {
+    const runs = first.slice(graph * 3, graph * 3 + 3);
+    assertEquals(runs[0].runSeed, scenario.runSeed);
+    assertEquals(new Set(runs.map(({ runSeed }) => runSeed)).size, 3);
+    assert(runs.every(({ seed }) => seed === scenario.seed));
   });
 });
 
@@ -170,6 +187,15 @@ Deno.test("scenario evaluation is deterministic, immutable, and finite", () => {
   assertEquals(first, second);
   assertEquals(JSON.stringify(candidate), snapshot);
   assert(Object.values(first.metrics).every(Number.isFinite));
+  assert(Object.values(first.health).every(Number.isFinite));
+  assert(
+    Math.abs(
+      Object.values(first.diagnostics.stateSharesSteady).reduce(
+        (sum, value) => sum + value,
+        0,
+      ) - 1,
+    ) < 1e-9,
+  );
 });
 
 Deno.test("finite throughput windows allow cycles already in flight", () => {
@@ -218,4 +244,26 @@ Deno.test("aggregate scoring rewards improvements and penalizes failures", () =>
   ]);
   assert(high.score > low.score);
   assert(failed.score < high.score);
+});
+
+Deno.test("multi-run aggregation exposes weak seeds and graph failures", () => {
+  const stable = aggregateEvaluation([
+    { ...scoredFixture(0.8), seed: 1 },
+    { ...scoredFixture(0.8), seed: 1 },
+    { ...scoredFixture(0.8), seed: 2 },
+    { ...scoredFixture(0.8), seed: 2 },
+  ]);
+  const volatile = aggregateEvaluation([
+    { ...scoredFixture(0.8), seed: 1 },
+    { ...scoredFixture(0.1, { noAdaptDelivery: true }), seed: 1 },
+    { ...scoredFixture(0.8), seed: 2 },
+    { ...scoredFixture(0.8), seed: 2 },
+  ]);
+
+  assertEquals(stable.runCount, 4);
+  assertEquals(stable.graphCount, 2);
+  assertEquals(stable.seedScoreSpread, 0);
+  assert(volatile.seedFloorScore < stable.seedFloorScore);
+  assert(volatile.seedScoreSpread > stable.seedScoreSpread);
+  assertEquals(volatile.failureGraphRates.noAdaptDelivery, 0.5);
 });

@@ -488,6 +488,8 @@ const makeAnt = (id, hill, launchDelay) => ({
   searchState: { kind: "explore", frontierArmed: false },
   exploreChoices: 0,
   followChoices: 0,
+  returnSignalChoices: 0,
+  returnRandomChoices: 0,
   trips: 0,
 });
 
@@ -989,12 +991,17 @@ const startReturnEdge = (ant, graph, pheromones, params, seed) => {
     ant.previous,
   );
   const [to, nextSeed] = chooseWithSeed(probabilities, seed);
+  const followedSignal = signaled.length > 0;
   return [
     {
       ...ant,
       edge: movementEdge(ant, graph, to, {
-        returnTrail: signaled.length > 0 ? "signal" : "random",
+        returnTrail: followedSignal ? "signal" : "random",
       }),
+      returnSignalChoices: (ant.returnSignalChoices ?? 0) +
+        Number(followedSignal),
+      returnRandomChoices: (ant.returnRandomChoices ?? 0) +
+        Number(!followedSignal),
     },
     nextSeed,
   ];

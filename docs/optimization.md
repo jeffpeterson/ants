@@ -604,12 +604,56 @@ measurements, retune follower release, evaluate diminishing deposits, then intro
 finite and spawning food. Every stage must retain the local home-potential invariant and
 pass fresh browser-cadence and boundary scenarios before changing the default.
 
+### Evaluator v6: colony health and repeated runs
+
+The v6 evaluator adds mechanism health without changing the five outcome dimensions or
+their score weights. Existing v5 scores therefore remain directly reproducible with one
+run per graph.
+
+Four steady-window and late-adaptation observations are reported:
+
+- **Productive utilization** is the geometric mean of time spent following or carrying
+  food in the steady and late-adaptation windows. Scouting, frontier, and escape shares
+  remain separately visible.
+- **Cycle participation** is the geometric mean of the fractions of ants that complete
+  at least one delivery in those windows. This prevents a productive minority from
+  hiding an idle majority.
+- **Trail coherence** samples the geometric mean of dominant-route efficiency and food
+  signal focus every two ideal travel units.
+- **Signaled homing** is the fraction of carrier junction choices that use the home
+  field rather than random fallback. The mandatory reversal at food is excluded.
+
+Health values are promotion gates rather than new score terms. A candidate must avoid a
+material paired utilization, participation, or coherence regression and must not reduce
+signaled homing.
+
+`--runs=N` repeats every graph with deterministic, candidate-independent colony seeds.
+The aggregate now reports the ordinary all-run score plus:
+
+- `seedFloorScore`: the robust aggregate of each graph's worst run;
+- `seedScoreSpread`: the mean best-to-worst score range within each graph; and
+- `failureGraphRates`: the fraction of graphs where any repeated run fails.
+
+Screening may retain one run for speed. Finalists and promotions use at least three; no
+candidate may introduce a failed graph or regress the seed floor. Full reports retain
+every graph/run pair, so stochastic failures are inspectable rather than averaged away.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:
 
 ```sh
 deno task evaluate
+```
+
+Compare one candidate on three colony runs per validation graph:
+
+```sh
+deno task evaluate -- \
+  --suite=validation \
+  --candidate=defaults \
+  --runs=3 \
+  --full
 ```
 
 Evaluate one source-controlled playground preset:

@@ -1,9 +1,11 @@
 import { DEFAULTS } from "../src/colony.js";
 import {
   CONFIRMATION_SCENARIOS,
+  DEFAULT_EVALUATION_RUNS,
   evaluateCandidate,
   EVALUATION_VERSION,
   HYPOTHESIS_PARAMS,
+  repeatScenarios,
   SCREENING_SCENARIOS,
   STRESS_SCENARIOS,
   TRAINING_SCENARIOS,
@@ -32,7 +34,12 @@ const limit = Math.max(
   1,
   Math.min(suite.length, Number(options.limit ?? suite.length)),
 );
-const scenarios = suite.slice(0, limit);
+const graphs = suite.slice(0, limit);
+const scenarios = repeatScenarios(
+  graphs,
+  Number(options.runs ?? DEFAULT_EVALUATION_RUNS),
+);
+const runs = scenarios.length / graphs.length;
 const imported = typeof options.input === "string" && options.input !== "true"
   ? JSON.parse(await Deno.readTextFile(options.input))
   : null;
@@ -70,7 +77,9 @@ const results = candidates.map(({ id, params }) => {
 const report = {
   version: EVALUATION_VERSION,
   suite: suiteName,
-  scenarioCount: scenarios.length,
+  scenarioCount: graphs.length,
+  runCount: scenarios.length,
+  runsPerGraph: runs,
   dt,
   results,
 };

@@ -301,6 +301,47 @@ Deno.test("a distant carrier identifies its tiny homeward signal", () => {
 
   assertEquals(stepped.ants[0].edge.to, homeward);
   assertEquals(stepped.ants[0].edge.returnTrail, "signal");
+  assertEquals(stepped.ants[0].returnSignalChoices, 1);
+  assertEquals(stepped.ants[0].returnRandomChoices, 0);
+});
+
+Deno.test("carrier diagnostics count random homeward fallbacks", () => {
+  const initial = testSimulation({
+    seed: 71,
+    params: { antCount: 8 },
+  });
+  const node = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    !initial.graph.foods.includes(id) &&
+    !initial.graph.adjacency[id].includes(initial.graph.hill)
+  )?.id;
+  assert(node !== undefined);
+  const ant = {
+    ...initial.ants[0],
+    launchDelay: 0,
+    node,
+    mode: "return",
+    previous: null,
+    searchState: { kind: "follow" },
+    foodDeposit: initial.params.fastDeposit,
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      slow: Object.fromEntries(
+        initial.graph.nodes.map(({ id }) => [
+          id,
+          id === initial.graph.hill ? 1 : 0,
+        ]),
+      ),
+    },
+    ants: [ant],
+  }, 0.001);
+
+  assertEquals(stepped.ants[0].edge.returnTrail, "random");
+  assertEquals(stepped.ants[0].returnSignalChoices, 0);
+  assertEquals(stepped.ants[0].returnRandomChoices, 1);
 });
 
 Deno.test("swarming makes a once-crossed bridge locally attractive", () => {
