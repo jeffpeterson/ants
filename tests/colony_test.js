@@ -1210,17 +1210,24 @@ Deno.test("a selected node keeps its inspector above the long control stack", as
   assert(!/\.inspector\s*\{\s*position:\s*sticky;/u.test(css));
 });
 
-Deno.test("food signal renders as one thin solid green line", async () => {
+Deno.test("food visuals share one thin solid green palette", async () => {
   const app = await Deno.readTextFile(new URL("../src/app.js", import.meta.url));
+  const css = await Deno.readTextFile(new URL("../styles.css", import.meta.url));
 
-  assert(app.includes('color: "#2f9e44"'));
+  assert(app.includes('const FOOD_COLOR = "#96b83f"'));
+  assertEquals(app.match(/fillStyle = FOOD_COLOR/gu)?.length, 2);
+  assert(app.includes("color: FOOD_COLOR"));
+  assert(css.includes("--food: #96b83f"));
+  assert(css.includes("--fast: var(--food)"));
+  assert(/\.legend-fast\s*\{\s*background:\s*var\(--fast\);/u.test(css));
+  assert(css.includes("background: rgb(150 184 63 / 28%)"));
   assertEquals(
     app.match(/width: \(intensity\) => 0\.5 \+ intensity \* 2\.6/gu)?.length,
     2,
   );
   assert(!app.includes("const drawLeadingRoute"));
   assert(!app.includes("drawLeadingRoute(current.simulation"));
-  assert(!/color:\s*"#2f9e44"[\s\S]*?dashed:\s*true/u.test(app));
+  assert(!/color:\s*FOOD_COLOR[\s\S]*?dashed:\s*true/u.test(app));
 });
 
 Deno.test("every interactive control has help text", async () => {

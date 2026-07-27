@@ -10,7 +10,8 @@
   --home: #e75b2a;
   --food: #96b83f;
   --slow: #c58b2a;
-  --fast: #087f8c;
+  --fast: var(--food);
+  --accent: #087f8c;
   --focus: #315cf5;
   --shadow: 0 14px 40px rgb(40 47 43 / 8%);
   font-family:
@@ -246,11 +247,7 @@ h2 {
 }
 
 .legend-fast {
-  background: repeating-linear-gradient(
-    90deg,
-    var(--fast) 0 5px,
-    transparent 5px 8px
-  );
+  background: var(--fast);
 }
 
 .legend .legend-follow,
@@ -613,21 +610,21 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .signal-food input[type="range"] {
-  background: rgb(8 127 140 / 24%);
+  background: rgb(150 184 63 / 28%);
 }
 
 .signal-food input[type="range"]::-webkit-slider-thumb {
   background: var(--fast);
-  box-shadow: 0 0 0 1px #41646b;
+  box-shadow: 0 0 0 1px #607d22;
 }
 
 .signal-food input[type="range"]::-moz-range-thumb {
   background: var(--fast);
-  box-shadow: 0 0 0 1px #41646b;
+  box-shadow: 0 0 0 1px #607d22;
 }
 
 .signal-food input[type="range"]:focus-visible {
-  outline-color: rgb(8 127 140 / 42%);
+  outline-color: rgb(150 184 63 / 42%);
 }
 
 hr {
@@ -726,7 +723,7 @@ hr {
 input[type="checkbox"] {
   width: 15px;
   height: 15px;
-  accent-color: var(--fast);
+  accent-color: var(--accent);
 }
 
 .muted {
@@ -765,7 +762,7 @@ input[type="checkbox"] {
   min-height: 44px;
   padding: 4px 6px;
   border: 0;
-  color: var(--fast);
+  color: var(--accent);
   background: transparent;
   font-size: 10px;
   font-weight: 700;
@@ -820,7 +817,7 @@ input[type="checkbox"] {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--fast);
+  background: var(--accent);
 }
 
 .algorithm-card {
@@ -874,7 +871,7 @@ input[type="checkbox"] {
 
 .algorithm-card .formula {
   padding: 10px;
-  border-left: 3px solid var(--fast);
+  border-left: 3px solid var(--accent);
   color: var(--ink);
   background: rgb(8 127 140 / 6%);
   font: 650 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -897,7 +894,7 @@ footer p {
 }
 
 footer span {
-  color: var(--fast);
+  color: var(--accent);
 }
 
 [hidden] {

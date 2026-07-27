@@ -44,6 +44,7 @@ import {
 import { antViewFor, metricsViewFor, trailSegments } from "./presentation.js";
 
 const byId = (id) => document.getElementById(id);
+const FOOD_COLOR = "#96b83f";
 
 Object.entries(CONTROL_HELP).forEach(([id, description]) => {
   const control = byId(id);
@@ -557,9 +558,9 @@ const trailStyle = (channel) =>
       width: (intensity) => 0.5 + intensity * 2.6,
     }
     : {
-      color: "#2f9e44",
-      faint: "rgba(47, 158, 68, 0.06)",
-      strong: (intensity) => `rgba(47, 158, 68, ${0.28 + intensity * 0.58})`,
+      color: FOOD_COLOR,
+      faint: "rgba(150, 184, 63, 0.06)",
+      strong: (intensity) => `rgba(150, 184, 63, ${0.28 + intensity * 0.58})`,
       offset: -2.8,
       width: (intensity) => 0.5 + intensity * 2.6,
     };
@@ -609,7 +610,7 @@ const drawFood = (point, active = true) => {
   context.fill();
   context.stroke();
   context.rotate(-0.65);
-  context.fillStyle = "#96b83f";
+  context.fillStyle = FOOD_COLOR;
   context.beginPath();
   context.ellipse(0, 0, 8, 4.5, 0, 0, Math.PI * 2);
   context.fill();
@@ -702,7 +703,7 @@ const drawAnt = (view, points) => {
   context.arc(2.4, 0, 1.8, 0, Math.PI * 2);
   context.fill();
   if (view.returning) {
-    context.fillStyle = "#83b719";
+    context.fillStyle = FOOD_COLOR;
     context.strokeStyle = "#fffaf0";
     context.lineWidth = 1.4;
     context.beginPath();
