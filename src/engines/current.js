@@ -21,6 +21,8 @@ export const DEFAULTS = Object.freeze({
   trailJoinChance: 0.25,
   choiceFloor: 0,
   foodTrailModel: "node",
+  foodHalfDistance: 0.5,
+  foodReinforcement: 0.25,
   newTrailSignalShare: 0.2,
   headingInfluence: 1.58,
   fastDeposit: 0.72,
@@ -96,7 +98,19 @@ export const sanitizeParams = (values = {}) => ({
     1,
     finiteOr(DEFAULTS.choiceFloor, values.choiceFloor),
   ),
-  foodTrailModel: values.foodTrailModel === "edge" ? "edge" : "node",
+  foodTrailModel: ["edge", "potential"].includes(values.foodTrailModel)
+    ? values.foodTrailModel
+    : "node",
+  foodHalfDistance: clamp(
+    0.05,
+    2,
+    finiteOr(DEFAULTS.foodHalfDistance, values.foodHalfDistance),
+  ),
+  foodReinforcement: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.foodReinforcement, values.foodReinforcement),
+  ),
   newTrailSignalShare: clamp(
     0,
     1,
@@ -787,6 +801,12 @@ export const reinforceHome = (level, source, length, rate) => {
   return level + clamp(0, 1, rate) * Math.max(0, cap - level);
 };
 
+export const attenuateFood = (level, length, halfDistance) =>
+  level * Math.pow(2, -length / halfDistance);
+
+export const reinforceFood = (level, cap, rate) =>
+  level + clamp(0, 1, rate) * Math.max(0, cap - level);
+
 const movementEdge = (ant, graph, to, extra = {}) => {
   const length = graph.edgeById[edgeKey(ant.node, to)].length;
   return {
@@ -1020,6 +1040,7 @@ export const competitiveFoodDeposit = (
 ) => Math.max(base, share * competingLevel - level);
 
 const foodDepositAt = (node, previous, pheromones, params) => {
+  if (params.foodTrailModel === "potential") return 1;
   const localLevel = pheromones.fast[node] ?? 0;
   const competingLevel = previous === null ? 0 : pheromones.fast[previous] ?? 0;
   return competitiveFoodDeposit(
@@ -1030,7 +1051,8 @@ const foodDepositAt = (node, previous, pheromones, params) => {
   );
 };
 
-const beginReturn = (ant, deposit) => {
+const beginReturn = (ant, deposit, params) => {
+  const potential = params.foodTrailModel === "potential";
   return {
     ant: {
       ...ant,
@@ -1047,7 +1069,14 @@ const beginReturn = (ant, deposit) => {
       distance: ant.tripDistance,
       food: ant.node,
     }],
-    deposits: [],
+    deposits: potential
+      ? [{
+        channel: "fast",
+        target: ant.node,
+        amount: 1,
+        combine: "max",
+      }]
+      : [],
   };
 };
 
@@ -1070,6 +1099,7 @@ const arriveSearching = (ant, graph, pheromones, params) => {
         pheromones,
         params,
       ),
+      params,
     )
     : { ant: arrived, events: [], deposits: [] };
 };
@@ -1109,6 +1139,7 @@ const arriveReturning = (ant, graph) => {
 
 const arrive = (ant, graph, pheromones, params) => {
   const returning = ant.mode === "return";
+  const potential = params.foodTrailModel === "potential";
   const source = pheromones.slow[ant.edge.from] ?? 0;
   const mapping = !returning && ant.searchState.kind !== "escape";
   const slowDeposits = mapping
@@ -1138,7 +1169,30 @@ const arrive = (ant, graph, pheromones, params) => {
   const homeward = returning &&
     (pheromones.slow[ant.edge.to] ?? 0) >
       (pheromones.slow[ant.edge.from] ?? 0);
-  const fastDeposits = homeward || foundFood
+  const potentialDeposits = returning && homeward && potential
+    ? [
+      {
+        channel: "fastEdges",
+        sourceChannel: "fast",
+        source: ant.edge.from,
+        target: edgeKey(ant.edge.from, ant.edge.to),
+        distance: ant.edge.length / 2,
+        halfDistance: params.foodHalfDistance,
+        rate: params.foodReinforcement,
+        combine: "propagate",
+      },
+      {
+        channel: "fast",
+        source: ant.edge.from,
+        target: ant.edge.to,
+        distance: ant.edge.length,
+        halfDistance: params.foodHalfDistance,
+        rate: params.foodReinforcement,
+        combine: "propagate",
+      },
+    ]
+    : [];
+  const additiveDeposits = !potential && (homeward || foundFood)
     ? [
       {
         channel: "fast",
@@ -1156,7 +1210,12 @@ const arrive = (ant, graph, pheromones, params) => {
     : [];
   return {
     ...result,
-    deposits: [...slowDeposits, ...fastDeposits, ...result.deposits],
+    deposits: [
+      ...slowDeposits,
+      ...result.deposits,
+      ...potentialDeposits,
+      ...additiveDeposits,
+    ],
   };
 };
 
@@ -1213,6 +1272,7 @@ const advanceAnt = (
         pheromones,
         params,
       ),
+      params,
     )
     : null;
   if (discovered) {
@@ -1228,7 +1288,7 @@ const advanceAnt = (
     return {
       ant: continued.ant,
       seed: continued.seed,
-      deposits: continued.deposits,
+      deposits: [...discovered.deposits, ...continued.deposits],
       events: [...discovered.events, ...continued.events],
     };
   }
@@ -1290,6 +1350,20 @@ const advanceAnt = (
 const applyDeposits = (pheromones, deposits) => {
   deposits.forEach((deposit) => {
     const field = pheromones[deposit.channel];
+    if (deposit.combine === "propagate") {
+      const sourceField = pheromones[deposit.sourceChannel ?? deposit.channel];
+      const cap = attenuateFood(
+        sourceField[deposit.source] ?? 0,
+        deposit.distance,
+        deposit.halfDistance,
+      );
+      field[deposit.target] = reinforceFood(
+        field[deposit.target] ?? 0,
+        cap,
+        deposit.rate,
+      );
+      return;
+    }
     field[deposit.target] = deposit.combine === "max"
       ? Math.max(field[deposit.target], deposit.amount)
       : field[deposit.target] + deposit.amount;

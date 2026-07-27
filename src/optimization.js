@@ -49,6 +49,8 @@ export const EVALUATED_KEYS = Object.freeze([
   ...OPTIMIZED_KEYS,
   "homewardPreference",
   "foodTrailModel",
+  "foodHalfDistance",
+  "foodReinforcement",
 ]);
 
 export const PARAMETER_SPECS = Object.freeze([

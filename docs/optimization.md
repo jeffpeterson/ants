@@ -649,6 +649,22 @@ select finalists; validation, fresh confirmation, and browser cadence must impro
 adaptation and seed floor without adding failures or materially regressing static
 throughput, efficiency, utilization, participation, coherence, or signaled homing.
 
+The first grid retained three candidates for repeated-seed screening:
+
+| Half-distance | Reinforcement | Screen | Stress | Stress seed floor |
+| ------------: | ------------: | -----: | -----: | ----------------: |
+|           0.3 |          100% |  79.47 |  34.90 |             37.13 |
+|           0.5 |           50% |  78.91 |  44.27 |             36.43 |
+|           1.0 |           25% |  77.89 |  39.93 |             30.44 |
+
+These are three-run values. The additive control scored `78.41` on screening and `34.08`
+on stress, with a `28.95` stress seed floor. All bounded candidates retained zero
+screening failures but, like the control, missed relocated delivery on one of four
+stress graphs. The `0.5`/`50%` pair is exposed as the **Bounded food potential** causal
+preset because it produced the strongest repeated stress score. It is not promoted to
+the default until the preregistered scout-lifecycle and follower-floor factorial
+resolves that failure and passes the held-out suites.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or

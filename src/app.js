@@ -895,6 +895,18 @@ const sliderConfigs = [
     (value) => value * 100,
   ],
   [
+    "foodHalfDistance",
+    (value) => Number(value) / 100,
+    (value) => `${Number(value) / 100} u`,
+    (value) => value * 100,
+  ],
+  [
+    "foodReinforcement",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
     "homeReinforcement",
     (value) => Number(value) / 100,
     (value) => `${value}%`,

@@ -1,5 +1,6 @@
 import {
   addFood,
+  attenuateFood,
   choiceProbabilities,
   competitiveFoodDeposit,
   createSimulation,
@@ -13,6 +14,7 @@ import {
   isConnected,
   moveFood,
   nextRandom,
+  reinforceFood,
   reinforceHome,
   removeFood,
   stepSimulation,
@@ -225,6 +227,115 @@ Deno.test("home reinforcement accumulates below its local gradient cap", () => {
   assertEquals(reinforceHome(0.9, 0.5, 0.2, 0.25), 0.9);
   const next = reinforceHome(0, levels.at(-1), 0.2, 0.25);
   assert(next > 0 && next < levels.at(-1));
+});
+
+Deno.test("bounded food potential weakens monotonically with route distance", () => {
+  assertEquals(
+    parameters({ foodTrailModel: "potential" }).foodTrailModel,
+    "potential",
+  );
+  assertEquals(
+    testSimulation({ params: { foodTrailModel: "unknown" } }).params.foodTrailModel,
+    "node",
+  );
+  assert(Math.abs(attenuateFood(1, 0.5, 0.5) - 0.5) < 1e-12);
+  const caps = [0.1, 0.2, 0.3].reduce(
+    (levels, length) => [
+      ...levels,
+      attenuateFood(levels.at(-1), length, 0.5),
+    ],
+    [1],
+  );
+  assert(caps.every((cap, index) => index === 0 || cap < caps[index - 1]));
+
+  const levels = Array.from({ length: 4 }).reduce(
+    (values) => [...values, reinforceFood(values.at(-1), 0.5, 0.25)],
+    [0],
+  );
+  assert(levels.every((level, index) => index === 0 || level > levels[index - 1]));
+  assert(levels.every((level) => level <= 0.5));
+  assertEquals(reinforceFood(0.7, 0.5, 1), 0.7);
+});
+
+Deno.test("bounded food trails stay population-independent and route-local", () => {
+  const state = run(
+    testSimulation({
+      seed: 17,
+      params: {
+        antCount: 64,
+        foodTrailModel: "potential",
+        foodHalfDistance: 0.5,
+        foodReinforcement: 0.25,
+      },
+    }),
+    480,
+  );
+  const levels = Object.values(state.pheromones.fast);
+
+  assert(Math.max(...levels) <= 1 + 1e-12);
+  state.graph.edges.forEach(({ id, a, b }) => {
+    if ((state.pheromones.fastEdges[id] ?? 0) <= 0) return;
+    assert(
+      (state.pheromones.fast[a] ?? 0) > 0 ||
+        (state.pheromones.fast[b] ?? 0) > 0,
+      `Marked food edge ${id} has no endpoint potential`,
+    );
+  });
+});
+
+Deno.test("bounded carriers propagate only along homeward traversals", () => {
+  const initial = testSimulation({
+    seed: 23,
+    params: {
+      antCount: 8,
+      foodTrailModel: "potential",
+      foodHalfDistance: 0.5,
+      foodReinforcement: 0.25,
+    },
+  });
+  const from = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    initial.graph.adjacency[id].some((neighbor) => neighbor !== initial.graph.hill)
+  ).id;
+  const to = initial.graph.adjacency[from].find((node) => node !== initial.graph.hill);
+  const edge = initial.graph.edgeById[edgeKey(from, to)];
+  const unrelated = initial.graph.edges.find(({ id }) => id !== edge.id).id;
+  const ant = {
+    ...initial.ants[0],
+    launchDelay: 0,
+    node: from,
+    mode: "return",
+    previous: null,
+    edge: {
+      from,
+      to,
+      progress: 1,
+      length: edge.length,
+      returnTrail: "signal",
+    },
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    ants: [ant],
+    pheromones: {
+      ...initial.pheromones,
+      slow: {
+        ...initial.pheromones.slow,
+        [from]: 0.2,
+        [to]: 0.4,
+      },
+      fast: {
+        ...initial.pheromones.fast,
+        [from]: 1,
+      },
+    },
+  }, 0.001);
+  const midpoint = stepped.pheromones.fastEdges[edge.id];
+  const destination = stepped.pheromones.fast[to];
+
+  assert(midpoint > destination && destination > 0);
+  assert(midpoint <= 1 && destination <= 1);
+  assertEquals(stepped.pheromones.fastEdges[unrelated], 0);
 });
 
 Deno.test("a distant positive home gradient survives and remains navigable", () => {
@@ -1334,6 +1445,8 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "distanceInfluence",
     "choiceFloor",
     "foodTrailModel",
+    "foodHalfDistance",
+    "foodReinforcement",
     "newTrailSignalShare",
     "homeReinforcement",
     "fastInfluence",

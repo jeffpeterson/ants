@@ -9,6 +9,8 @@ export const ALGORITHM_KEYS = Object.freeze([
   "trailJoinChance",
   "choiceFloor",
   "foodTrailModel",
+  "foodHalfDistance",
+  "foodReinforcement",
   "newTrailSignalShare",
   "reversePenalty",
   "speed",

@@ -57,6 +57,16 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
     },
   ),
   builtIn(
+    "bounded-potential",
+    "Bounded food potential",
+    "Experimental local food gradient: bounded propagation prevents population-size amplification and non-food peaks.",
+    {
+      foodTrailModel: "potential",
+      foodHalfDistance: 0.5,
+      foodReinforcement: 0.5,
+    },
+  ),
+  builtIn(
     "adaptive-edge",
     "Adaptive edge trails",
     "More efficient and adaptive on many dense maps, but less reliable on sparse maps.",

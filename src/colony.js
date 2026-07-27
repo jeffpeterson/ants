@@ -6,6 +6,7 @@ import {
 } from "./engines/registry.js";
 
 export {
+  attenuateFood,
   choiceProbabilities,
   clamp,
   competitiveFoodDeposit,
@@ -17,6 +18,7 @@ export {
   homewardProbabilities,
   isConnected,
   nextRandom,
+  reinforceFood,
   reinforceHome,
   sanitizeParams,
   shortestRoute,

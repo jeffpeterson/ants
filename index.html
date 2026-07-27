@@ -351,8 +351,19 @@
               <span><span><strong class="food-name">Food</strong>-trail storage</span></span>
               <select id="foodTrailModel">
                 <option value="node" selected>Node levels</option>
+                <option value="potential">Bounded node potential</option>
                 <option value="edge">Undirected edges</option>
               </select>
+            </label>
+            <label class="slider-row signal-food" for="foodHalfDistance">
+              <span>Potential half-distance <output id="foodHalfDistance-value">0.5 u</output></span>
+              <input id="foodHalfDistance" type="range" min="5" max="200"
+                step="1" value="50">
+            </label>
+            <label class="slider-row signal-food" for="foodReinforcement">
+              <span>Potential reinforcement <output id="foodReinforcement-value">25%</output></span>
+              <input id="foodReinforcement" type="range" min="0" max="100"
+                step="1" value="25">
             </label>
             <label class="slider-row signal-persistent" for="homeReinforcement">
               <span><span><strong class="persistent-name">Persistent</strong> reinforcement</span> <output id="homeReinforcement-value">15%</output></span>

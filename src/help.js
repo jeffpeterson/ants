@@ -46,11 +46,15 @@ export const CONTROL_HELP = Object.freeze({
   choiceFloor:
     "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
   newTrailSignalShare:
-    "At pickup, a weak food node makes the ant carry enough pheromone to target this fraction of the signal at the endpoint it arrived from. Zero always uses the normal deposit.",
+    "For additive trails, a weak food node makes the ant carry enough pheromone to compete with the signal at the endpoint it arrived from.",
+  foodHalfDistance:
+    "For bounded potential, the local food field halves after this much route distance. Shorter values create a steeper foodward gradient.",
+  foodReinforcement:
+    "For bounded potential, the fraction of the locally safe signal gap filled by each carrier traversal.",
   homeReinforcement:
     "Fraction of the locally safe persistent home-field gap filled by each searching ant traversal. Lower values let repeated traffic strengthen the field gradually; 100% fills it in one pass.",
   foodTrailModel:
-    "Use scalar node levels for derived slopes along carrier-traversed edges, or use undirected edge strength with no slope. Neither mode marks adjacent untraversed branches.",
+    "Use additive node levels, bounded node potential, or undirected edge strength. Node slopes are exposed only along carrier-traversed edges.",
   fastInfluence:
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:
