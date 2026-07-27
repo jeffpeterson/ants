@@ -7,27 +7,10 @@ import {
   TRAINING_SCENARIOS,
   VALIDATION_SCENARIOS,
 } from "../src/optimization.js";
-
-const parseArgs = (args) =>
-  args.reduce((options, argument) => {
-    if (!argument.startsWith("--")) return options;
-    const [key, value = "true"] = argument.slice(2).split("=", 2);
-    return { ...options, [key]: value };
-  }, {});
-
-const parseOverrides = (value = "") =>
-  Object.fromEntries(
-    value.split(",")
-      .filter(Boolean)
-      .map((assignment) => {
-        const [key, raw = ""] = assignment.split("=", 2);
-        const numeric = Number(raw);
-        return [key, Number.isFinite(numeric) && raw !== "" ? numeric : raw];
-      }),
-  );
+import { parseArgs, parseAssignments } from "./args.js";
 
 const options = parseArgs(Deno.args);
-const overrides = parseOverrides(options.set);
+const overrides = parseAssignments(options.set);
 const suites = {
   screening: SCREENING_SCENARIOS,
   training: TRAINING_SCENARIOS,

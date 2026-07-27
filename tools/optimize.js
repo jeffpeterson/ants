@@ -8,13 +8,7 @@ import {
   TRAINING_SCENARIOS,
   VALIDATION_SCENARIOS,
 } from "../src/optimization.js";
-
-const parseArgs = (args) =>
-  args.reduce((options, argument) => {
-    if (!argument.startsWith("--")) return options;
-    const [key, value = "true"] = argument.slice(2).split("=", 2);
-    return { ...options, [key]: value };
-  }, {});
+import { parseArgs } from "./args.js";
 
 const boundedInteger = (value, fallback, minimum, maximum) =>
   Math.min(maximum, Math.max(minimum, Math.round(Number(value ?? fallback))));

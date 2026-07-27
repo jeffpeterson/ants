@@ -14,6 +14,7 @@ import {
   refineCandidates,
 } from "../src/optimization.js";
 import { createSimulation } from "../src/colony.js";
+import { parseArgs, parseAssignments } from "../tools/args.js";
 
 const assert = (condition, message = "Assertion failed") => {
   if (!condition) throw new Error(message);
@@ -31,6 +32,19 @@ Deno.test("optimization schema covers every tuned playground parameter", () => {
     new Set(PARAMETER_SPECS.map(({ key }) => key)).size,
     PARAMETER_SPECS.length,
   );
+});
+
+Deno.test("CLI options preserve assignments containing equals signs", () => {
+  const options = parseArgs([
+    "--set=choiceFloor=1,foodTrailModel=edge",
+    "--full",
+  ]);
+  assertEquals(options.set, "choiceFloor=1,foodTrailModel=edge");
+  assertEquals(options.full, "true");
+  assertEquals(parseAssignments(options.set), {
+    choiceFloor: 1,
+    foodTrailModel: "edge",
+  });
 });
 
 Deno.test("Latin hypercube designs are seeded and cover every stratum", () => {
