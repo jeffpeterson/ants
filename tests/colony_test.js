@@ -358,6 +358,7 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
 
 Deno.test("the playground exposes every requested decision and graph lever", async () => {
   const html = await Deno.readTextFile(new URL("../index.html", import.meta.url));
+  const css = await Deno.readTextFile(new URL("../styles.css", import.meta.url));
   [
     "exploreRate",
     "stopExploreChance",
@@ -379,6 +380,10 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   ["islandCount", "islandSeparation", "islandLinks"].forEach((id) =>
     assert(!html.includes(`id="${id}"`), `Obsolete ${id}`)
   );
+  assert(html.includes("signal-persistent"));
+  assert(html.includes("signal-food"));
+  assert(css.includes(".signal-persistent input"));
+  assert(css.includes(".signal-food input"));
 });
 
 Deno.test("saved map endpoints reproduce on the same graph recipe", () => {
@@ -395,4 +400,30 @@ Deno.test("saved map endpoints reproduce on the same graph recipe", () => {
   assertEquals(copy.graph.hill, source.graph.hill);
   assertEquals(copy.graph.foods, source.graph.foods);
   assert(copy.graph.edgeById[edgeKey(copy.graph.edges[0].a, copy.graph.edges[0].b)]);
+});
+
+Deno.test("the research library contains readable PDFs and all cited papers", async () => {
+  const directory = new URL("../docs/papers/", import.meta.url);
+  const papers = [];
+  for await (const entry of Deno.readDir(directory)) {
+    if (entry.isFile && entry.name.endsWith(".pdf")) papers.push(entry.name);
+  }
+  assert(papers.length >= 10);
+  [
+    "2009-dussutour-multiple-pheromones.pdf",
+    "2012-perna-individual-trail-rules.pdf",
+    "2022-sakamoto-one-way-trails.pdf",
+    "2023-garg-distributed-shortest-path.pdf",
+  ].forEach((paper) => assert(papers.includes(paper), `Missing ${paper}`));
+
+  for (const paper of papers) {
+    const file = await Deno.open(new URL(paper, directory));
+    const header = new Uint8Array(5);
+    await file.read(header);
+    file.close();
+    assertEquals(new TextDecoder().decode(header), "%PDF-");
+  }
+
+  const index = await Deno.readTextFile(new URL("../docs/README.md", import.meta.url));
+  assert(index.includes("10.1038/nature03105"));
 });

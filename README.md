@@ -118,6 +118,10 @@ conditions studied by [Garg et al.](https://doi.org/10.1073/pnas.2207959120). Tr
 renewal and evaporation are summarized in
 [Trail pheromone](https://en.wikipedia.org/wiki/Trail_pheromone).
 
+The [research library](docs/README.md) archives downloadable papers and annotates
+additional work on pheromone decay, error correction, directional cues, shortest paths,
+and artificial ant systems.
+
 Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
 fields. Returning ants finish trips from retired sources while old signals evaporate.
 Algorithm presets and map presets are stored separately in browser storage. The active
