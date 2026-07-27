@@ -2,6 +2,7 @@ import {
   addFood,
   attenuateFood,
   choiceProbabilities,
+  clearPheromones,
   competitiveFoodDeposit,
   createSimulation,
   decayPheromones,
@@ -10,13 +11,16 @@ import {
   explorationStopProbability,
   foodProbabilitiesForNode,
   generateGraph,
+  homeCloseness,
   homewardProbabilities,
   isConnected,
   moveFood,
   nextRandom,
   reinforceFood,
   reinforceHome,
+  relaxDistance,
   removeFood,
+  shortestRoute,
   stepSimulation,
   trailGradient,
   updateParams,
@@ -56,6 +60,24 @@ const testSimulation = (options = {}) =>
       ...options.params,
     },
   });
+
+const pathGraph = (length = 0.04) => {
+  const edge = (a, b) => ({
+    id: edgeKey(a, b),
+    a,
+    b,
+    length,
+  });
+  const edges = [edge(0, 1), edge(1, 2)];
+  return {
+    nodes: [0, 1, 2].map((id) => ({ id, x: id * length, y: 0 })),
+    edges,
+    adjacency: { 0: [1], 1: [0, 2], 2: [1] },
+    edgeById: Object.fromEntries(edges.map((item) => [item.id, item])),
+    hill: 0,
+    foods: [2],
+  };
+};
 
 const parameters = (patch = {}) => ({
   ...testSimulation({ seed: 1 }).params,
@@ -227,6 +249,140 @@ Deno.test("home reinforcement accumulates below its local gradient cap", () => {
   assertEquals(reinforceHome(0.9, 0.5, 0.2, 0.25), 0.9);
   const next = reinforceHome(0, levels.at(-1), 0.2, 0.25);
   assert(next > 0 && next < levels.at(-1));
+});
+
+Deno.test("local distance relaxation converges to shortest home distance", () => {
+  assertEquals(relaxDistance(-1, 0, 0.4), {
+    distance: 0.4,
+    update: 0.4,
+  });
+  assertEquals(relaxDistance(0.3, 0.5, 0.4), {
+    distance: 0.3,
+    update: null,
+  });
+  assertEquals(relaxDistance(-1, -1, 0.4), {
+    distance: -1,
+    update: null,
+  });
+  assertEquals(homeCloseness(0, "distance"), 1);
+  assert(homeCloseness(0.4, "distance") > homeCloseness(0.8, "distance"));
+  assertEquals(homeCloseness(-1, "distance"), 0);
+
+  const [graph] = generateGraph(71, parameters({ nodeCount: 24 }));
+  const relaxEdge = (field, from, to, length) => {
+    const result = relaxDistance(field[to], field[from], length);
+    return result.update === null ? field : { ...field, [to]: result.update };
+  };
+  const relaxPass = (field) =>
+    graph.edges.reduce(
+      (next, { a, b, length }) =>
+        relaxEdge(
+          relaxEdge(next, a, b, length),
+          b,
+          a,
+          length,
+        ),
+      field,
+    );
+  const settled = Array.from({ length: graph.nodes.length }).reduce(
+    relaxPass,
+    Object.fromEntries(
+      graph.nodes.map(({ id }) => [id, id === graph.hill ? 0 : -1]),
+    ),
+  );
+
+  graph.nodes.forEach(({ id }) =>
+    assert(
+      Math.abs(settled[id] - shortestRoute(graph, graph.hill, id).distance) <
+        1e-9,
+      `Node ${id} did not converge to shortest home distance`,
+    )
+  );
+});
+
+Deno.test("synthetic home distance propagates through ant arrivals", () => {
+  const initial = testSimulation({
+    seed: 23,
+    params: { antCount: 8, homeSignalModel: "distance" },
+  });
+  const to = initial.graph.adjacency[initial.graph.hill][0];
+  const edge = initial.graph.edgeById[edgeKey(initial.graph.hill, to)];
+  const ant = {
+    ...initial.ants[0],
+    launchDelay: 0,
+    edge: {
+      from: initial.graph.hill,
+      to,
+      progress: 1,
+      length: edge.length,
+      exploring: true,
+    },
+  };
+  const stepped = stepSimulation({ ...initial, ants: [ant] }, 0.001);
+
+  assertEquals(initial.pheromones.slow[initial.graph.hill], 0);
+  assert(
+    initial.graph.nodes
+      .filter(({ id }) => id !== initial.graph.hill)
+      .every(({ id }) => initial.pheromones.slow[id] === -1),
+  );
+  assert(Math.abs(stepped.pheromones.slow[to] - edge.length) < 1e-12);
+  assert(Math.abs(stepped.ants[0].homeDistance - edge.length) < 1e-12);
+});
+
+Deno.test("one ant sees its own same-tick distance chain", () => {
+  const initial = createSimulation({
+    graph: pathGraph(),
+    runSeed: 7,
+    params: {
+      antCount: 8,
+      homeSignalModel: "distance",
+      speed: 0.65,
+      reversePenalty: 0.01,
+      headingInfluence: 4,
+      distanceInfluence: 0,
+    },
+  });
+  const stepped = stepSimulation({
+    ...initial,
+    ants: [{ ...initial.ants[0], launchDelay: 0 }],
+  }, 0.25);
+
+  assertEquals(stepped.stats.discoveries, 1);
+  assertEquals(stepped.stats.deliveries, 1);
+  assert(Math.abs(stepped.pheromones.slow[1] - 0.04) < 1e-12);
+  assert(Math.abs(stepped.pheromones.slow[2] - 0.08) < 1e-12);
+});
+
+Deno.test("synthetic distance reverses raw home-field ordering locally", () => {
+  const pheromones = {
+    slow: { 0: 1, 1: 0.4, 2: 1.8 },
+    slowEdges: {
+      [edgeKey(0, 1)]: 1,
+      [edgeKey(0, 2)]: 1,
+    },
+    fast: { 0: 0, 1: 0, 2: 0 },
+    fastEdges: {},
+  };
+  const params = parameters({
+    homeSignalModel: "distance",
+    exploreSignalBias: -4,
+    returnFastInfluence: 0,
+    returnSlowInfluence: 1,
+    returnSlowPolarity: 4,
+    reversePenalty: 1,
+  });
+  const homeward = homewardProbabilities(0, [1, 2], pheromones, params);
+  const exploring = choiceProbabilities(
+    0,
+    [1, 2],
+    pheromones,
+    params,
+    true,
+  );
+
+  assert(homeward[0].probability > homeward[1].probability);
+  assert(exploring[1].probability > exploring[0].probability);
 });
 
 Deno.test("bounded food potential weakens monotonically with route distance", () => {
@@ -531,6 +687,31 @@ Deno.test("every persistent mark retains a higher home-potential neighbor", () =
             state.pheromones.slow[neighbor] > state.pheromones.slow[id]
           ),
           `Node ${id} became a persistent local maximum at step ${step}`,
+        )
+      );
+  }
+});
+
+Deno.test("every synthetic distance retains a shorter home neighbor", () => {
+  let state = testSimulation({
+    seed: 93,
+    params: {
+      antCount: 48,
+      homeSignalModel: "distance",
+      speed: 0.65,
+    },
+  });
+  for (let step = 0; step < 240; step += 1) {
+    state = stepSimulation(state, 0.25);
+    state.graph.nodes
+      .filter(({ id }) => id !== state.graph.hill && state.pheromones.slow[id] >= 0)
+      .forEach(({ id }) =>
+        assert(
+          state.graph.adjacency[id].some((neighbor) =>
+            state.pheromones.slow[neighbor] >= 0 &&
+            state.pheromones.slow[neighbor] < state.pheromones.slow[id]
+          ),
+          `Node ${id} lost its shorter home neighbor at step ${step}`,
         )
       );
   }
@@ -1394,6 +1575,93 @@ Deno.test("food-trail storage switches without resetting the colony", () => {
   assertEquals(changed.params.foodTrailModel, "edge");
 });
 
+Deno.test("home-signal models switch without resetting ant movement", () => {
+  const warm = adaptationFixture();
+  const changed = updateParams(warm, { homeSignalModel: "distance" });
+
+  assertEquals(
+    changed.ants.map(({ id, node, edge, mode }) => ({ id, node, edge, mode })),
+    warm.ants.map(({ id, node, edge, mode }) => ({ id, node, edge, mode })),
+  );
+  assertEquals(changed.elapsed, warm.elapsed);
+  assertEquals(changed.stats, warm.stats);
+  assertEquals(changed.params.homeSignalModel, "distance");
+  assertEquals(changed.pheromones.slow[warm.graph.hill], 0);
+  assert(
+    warm.graph.nodes
+      .filter(({ id }) => id !== warm.graph.hill)
+      .every(({ id }) => changed.pheromones.slow[id] === -1),
+  );
+});
+
+Deno.test("clearing synthetic home distance also clears carried estimates", () => {
+  const warm = run(
+    testSimulation({
+      seed: 23,
+      params: { homeSignalModel: "distance" },
+    }),
+    120,
+  );
+  const cleared = clearPheromones(warm);
+
+  assertEquals(cleared.pheromones.slow[warm.graph.hill], 0);
+  assert(
+    warm.graph.nodes
+      .filter(({ id }) => id !== warm.graph.hill)
+      .every(({ id }) => cleared.pheromones.slow[id] === -1),
+  );
+  cleared.ants.forEach((ant) =>
+    assertEquals(
+      ant.homeDistance,
+      ant.node === warm.graph.hill ? 0 : -1,
+    )
+  );
+});
+
+Deno.test("reset distance knowledge recovers only from a local home path", () => {
+  const inFlight = (homeSignalModel) => {
+    const initial = createSimulation({
+      graph: pathGraph(),
+      params: { antCount: 8, homeSignalModel, speed: 0.65 },
+    });
+    const movingAnt = (ant, from, to, homeDistance) => ({
+      ...ant,
+      node: from,
+      launchDelay: 0,
+      homeDistance,
+      edge: {
+        from,
+        to,
+        length: initial.graph.edgeById[edgeKey(from, to)].length,
+        progress: 1,
+        exploring: true,
+      },
+    });
+    return {
+      ...initial,
+      ants: [
+        movingAnt(initial.ants[0], 0, 1, 0),
+        movingAnt(initial.ants[1], 2, 1, 0.08),
+        ...initial.ants.slice(2),
+      ],
+    };
+  };
+  const resetStates = [
+    clearPheromones(inFlight("distance")),
+    updateParams(inFlight("pheromone"), { homeSignalModel: "distance" }),
+  ];
+
+  resetStates.forEach((reset) => {
+    assertEquals(
+      reset.ants.slice(0, 2).map(({ homeDistance }) => homeDistance),
+      [0, -1],
+    );
+    const stepped = stepSimulation(reset, 0.001);
+    assert(Math.abs(stepped.pheromones.slow[1] - 0.04) < 1e-12);
+    assertEquals(stepped.pheromones.slow[2], -1);
+  });
+});
+
 Deno.test("the colony adapts to moved food without resetting", () => {
   const warm = adaptationFixture();
   const source = warm.graph.foods[0];
@@ -1459,6 +1727,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "foodReinforcement",
     "newTrailSignalShare",
     "homeReinforcement",
+    "homeSignalModel",
     "fastInfluence",
     "outboundPolarity",
     "homewardPreference",

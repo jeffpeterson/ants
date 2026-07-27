@@ -709,6 +709,43 @@ finalists; validation, fresh confirmation, and browser cadence retain the existi
 failure, seed-floor, throughput, efficiency, utilization, participation, coherence, and
 homing gates.
 
+### Synthetic distance-field controls
+
+Two controls test whether the remaining failures come from pheromone amplitude rather
+than local information:
+
+- **Home distance:** home stores `0`; every other node starts unknown. An ant carries
+  one scalar estimate. Crossing an edge proposes its estimate plus edge length; on
+  arrival, the ant and node keep the smaller known value. All ants exchange this value,
+  it does not decay, and no route, predecessor, destination, or global shortest path is
+  available to ant decisions. The globally computed shortest route remains isolated as
+  evaluator-only diagnostic data.
+- **Food distance:** a food encounter stores `0`; only carriers propagate distance along
+  their homeward traversals. Evaporation adds an equivalent age distance:
+
+  ```text
+  foodDistance += foodHalfDistance × elapsed / foodHalfLife
+  ```
+
+  Navigation and rendering derive closeness as `2 ^ (-foodDistance / foodHalfDistance)`.
+  Thus stale food appears progressively farther away, a new source competes immediately
+  at zero, and the field becomes unknown at the same `1e-6` cutoff as ordinary food
+  pheromone.
+
+Both are asynchronous local distance-vector processes. The home field should converge to
+shortest-path distance under fair edge traversal; the food field should converge toward
+the shortest recently reinforced carrier route while retaining finite memory for
+adaptation. Ship them as separate named controls before considering either for the
+default.
+
+The corrected home-distance causal run retained perfect signaled homing and no stranded
+ants. It raised productive utilization to `0.965` on screening and `0.963` on stress,
+but adaptation remained weak at `0.322` and `0.262`; the corresponding scores were
+`64.88` and `27.97`, with one of four stress graphs missing a relocated-food delivery.
+This supports the mechanism's homing prediction while showing that a nearly fully
+recruited colony still needs a better exploration reserve. **Synthetic home distance**
+is therefore exposed as a control, not promoted as a default.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or

@@ -34,6 +34,32 @@ Deno.test("weak home trails stay visible on the logarithmic scale", () => {
   assertEquals(trailStrength("slow", 0), 0);
 });
 
+Deno.test("synthetic home distances render as homeward closeness", () => {
+  const initial = createPlaygroundSimulation({ map });
+  const neighbor = initial.graph.adjacency[initial.graph.hill][0];
+  const remote =
+    initial.graph.nodes.find(({ id }) => id !== initial.graph.hill && id !== neighbor)
+      .id;
+  const state = {
+    ...initial,
+    params: { ...initial.params, homeSignalModel: "distance" },
+    pheromones: {
+      ...initial.pheromones,
+      slow: {
+        ...initial.pheromones.slow,
+        [initial.graph.hill]: 0,
+        [neighbor]: 0.5,
+        [remote]: -1,
+      },
+    },
+  };
+  const nodes = trailViewFor(state).slow.nodes;
+
+  assertEquals(nodes[initial.graph.hill], 1);
+  assert(Math.abs(nodes[neighbor] - 2 / 3) < 1e-12);
+  assertEquals(nodes[remote], 0);
+});
+
 Deno.test("current node and edge trail rendering retains scalar parity", () => {
   const initial = createPlaygroundSimulation({ map });
   const edge = initial.graph.edges[0];

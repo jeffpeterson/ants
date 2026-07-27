@@ -49,6 +49,7 @@ export const EVALUATED_KEYS = Object.freeze([
   ...OPTIMIZED_KEYS,
   "scoutLifecycle",
   "homewardPreference",
+  "homeSignalModel",
   "foodTrailModel",
   "foodHalfDistance",
   "foodReinforcement",

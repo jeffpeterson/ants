@@ -57,6 +57,8 @@ export const CONTROL_HELP = Object.freeze({
     "Fraction of the locally safe persistent home-field gap filled by each searching ant traversal. Lower values let repeated traffic strengthen the field gradually; 100% fills it in one pass.",
   foodTrailModel:
     "Use additive node levels, bounded node potential, or undirected edge strength. Node slopes are exposed only along carrier-traversed edges.",
+  homeSignalModel:
+    "Use reinforced pheromone, or a synthetic local distance estimate. Distance mode starts home at zero and lets ants and nodes exchange only shorter estimates.",
   fastInfluence:
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:

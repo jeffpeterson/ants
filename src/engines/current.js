@@ -9,6 +9,7 @@ export const DEFAULTS = Object.freeze({
   speed: 0.17,
   slowHalfLife: 3_600,
   homeReinforcement: 0.15,
+  homeSignalModel: "pheromone",
   fastHalfLife: 14.4,
   fastInfluence: 4.56,
   outboundPolarity: 0.78,
@@ -79,6 +80,7 @@ export const sanitizeParams = (values = {}) => ({
     1,
     finiteOr(DEFAULTS.homeReinforcement, values.homeReinforcement),
   ),
+  homeSignalModel: values.homeSignalModel === "distance" ? "distance" : "pheromone",
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
   exploreSignalBias: clamp(
     -4,
@@ -478,8 +480,15 @@ const emptyField = (graph) => Object.fromEntries(graph.nodes.map(({ id }) => [id
 const emptyEdgeField = (graph) =>
   Object.fromEntries(graph.edges.map(({ id }) => [id, 0]));
 
-const emptyPheromones = (graph) => ({
-  slow: { ...emptyField(graph), [graph.hill]: 1 },
+const emptyHomeField = (graph, params) =>
+  params.homeSignalModel === "distance"
+    ? Object.fromEntries(
+      graph.nodes.map(({ id }) => [id, id === graph.hill ? 0 : -1]),
+    )
+    : { ...emptyField(graph), [graph.hill]: 1 };
+
+const emptyPheromones = (graph, params) => ({
+  slow: emptyHomeField(graph, params),
   slowEdges: emptyEdgeField(graph),
   fast: emptyField(graph),
   fastEdges: emptyEdgeField(graph),
@@ -501,6 +510,7 @@ const makeAnt = (id, hill, launchDelay) => ({
   tripDistance: 0,
   turnAround: null,
   foodDeposit: 0,
+  homeDistance: 0,
   searchState: { kind: "explore", frontierArmed: false },
   exploreChoices: 0,
   followChoices: 0,
@@ -563,7 +573,7 @@ export const createSimulation = ({
     elapsed: 0,
     params,
     graph,
-    pheromones: emptyPheromones(graph),
+    pheromones: emptyPheromones(graph, params),
     ants: generatedAnts.ants,
     lastEvents: [],
     stats: {
@@ -590,15 +600,20 @@ const decayField = (field, halfLife, dt, cutoff = 1e-6) => {
 };
 
 export const decayPheromones = (pheromones, params, dt) => ({
-  slow: decayField(pheromones.slow, params.slowHalfLife, dt, 0),
+  slow: params.homeSignalModel === "distance"
+    ? { ...pheromones.slow }
+    : decayField(pheromones.slow, params.slowHalfLife, dt, 0),
   slowEdges: decayField(pheromones.slowEdges ?? {}, params.slowHalfLife, dt),
   fast: decayField(pheromones.fast, params.fastHalfLife, dt),
   fastEdges: decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
 });
 
-const anchorHill = (pheromones, hill) => ({
+const anchorHill = (pheromones, hill, params) => ({
   ...pheromones,
-  slow: { ...pheromones.slow, [hill]: 1 },
+  slow: {
+    ...pheromones.slow,
+    [hill]: params.homeSignalModel === "distance" ? 0 : 1,
+  },
 });
 
 export const trailGradient = (field, edge) =>
@@ -624,6 +639,26 @@ const relativeGradient = (field, node, neighbor, floor = 0) => {
   return total > 0 ? (there - here) / total : 0;
 };
 
+export const homeCloseness = (value, model) =>
+  model === "distance"
+    ? Number.isFinite(value) && value >= 0 ? 1 / (1 + value) : 0
+    : Number.isFinite(value) && value > 0
+    ? value
+    : 0;
+
+const homeLevel = (pheromones, params, node) =>
+  homeCloseness(
+    pheromones.slow[node],
+    params.homeSignalModel,
+  );
+
+const homeGradient = (pheromones, params, node, neighbor) => {
+  const here = homeLevel(pheromones, params, node);
+  const there = homeLevel(pheromones, params, neighbor);
+  const total = here + there;
+  return total > 0 ? (there - here) / total : 0;
+};
+
 const signalMarked = (signal, node, neighbor) =>
   signal.edgeMask === undefined ||
   (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > 0;
@@ -632,13 +667,22 @@ const signalValue = (signal, node, neighbor) =>
   signalMarked(signal, node, neighbor)
     ? signal.edgeField
       ? signal.field[edgeKey(node, neighbor)] ?? 0
-      : signal.field[neighbor] ?? 0
+      : signal.transform?.(signal.field[neighbor]) ??
+        signal.field[neighbor] ??
+        0
     : 0;
 
 const signalPolarity = (signal, node, neighbor) =>
   signal.edgeField || !signalMarked(signal, node, neighbor)
     ? 0
-    : relativeGradient(signal.field, node, neighbor);
+    : signal.transform === undefined
+    ? relativeGradient(signal.field, node, neighbor)
+    : (() => {
+      const here = signal.transform(signal.field[node]);
+      const there = signal.transform(signal.field[neighbor]);
+      const total = here + there;
+      return total > 0 ? (there - here) / total : 0;
+    })();
 
 const edgeCoverage = (pheromones, node, neighbor) =>
   pheromones.slowEdges?.[edgeKey(node, neighbor)] ?? 0;
@@ -740,11 +784,15 @@ export const choiceProbabilities = (
       node: neighbor,
       weight: Math.exp(
         params.exploreSignalBias *
-          relativeGradient(
-            pheromones.slow,
-            node,
-            neighbor,
-            EXPLORATION_HOME_FLOOR,
+          (
+            params.homeSignalModel === "distance"
+              ? homeGradient(pheromones, params, node, neighbor)
+              : relativeGradient(
+                pheromones.slow,
+                node,
+                neighbor,
+                EXPLORATION_HOME_FLOOR,
+              )
           ),
       ) * (neighbor === discouragedNode ? params.reversePenalty : 1) *
         (
@@ -809,6 +857,22 @@ export const attenuateFood = (level, length, halfDistance) =>
 export const reinforceFood = (level, cap, rate) =>
   level + clamp(0, 1, rate) * Math.max(0, cap - level);
 
+const knownDistance = (value) => Number.isFinite(value) && value >= 0;
+
+export const relaxDistance = (nodeDistance, antDistance, edgeLength) => {
+  const proposal = knownDistance(antDistance) ? antDistance + edgeLength : -1;
+  if (
+    knownDistance(nodeDistance) && (
+      !knownDistance(proposal) || nodeDistance <= proposal
+    )
+  ) {
+    return { distance: nodeDistance, update: null };
+  }
+  return knownDistance(proposal)
+    ? { distance: proposal, update: proposal }
+    : { distance: -1, update: null };
+};
+
 const movementEdge = (ant, graph, to, extra = {}) => {
   const length = graph.edgeById[edgeKey(ant.node, to)].length;
   return {
@@ -837,8 +901,11 @@ const foodwardProbabilities = (ant, graph, pheromones, params) =>
     ),
   );
 
-const hasExplorationProgress = (ant, graph, pheromones) => {
-  const readable = (node) => fieldLevel(pheromones.slow, node, EXPLORATION_HOME_FLOOR);
+const hasExplorationProgress = (ant, graph, pheromones, params) => {
+  const readable = (node) =>
+    params.homeSignalModel === "distance"
+      ? homeLevel(pheromones, params, node)
+      : fieldLevel(pheromones.slow, node, EXPLORATION_HOME_FLOOR);
   const here = readable(ant.node);
   return graph.adjacency[ant.node].some((neighbor) =>
     neighbor !== ant.previous &&
@@ -851,9 +918,9 @@ const hasExplorationProgress = (ant, graph, pheromones) => {
 
 const escapeProbabilities = (ant, graph, pheromones, params) => {
   const neighbors = graph.adjacency[ant.node];
-  const here = pheromones.slow[ant.node] ?? 0;
+  const here = homeLevel(pheromones, params, ant.node);
   const homeward = neighbors.filter((neighbor) =>
-    (pheromones.slow[neighbor] ?? 0) > here
+    homeLevel(pheromones, params, neighbor) > here
   );
   const options = homeward.length > 0
     ? homeward
@@ -863,12 +930,14 @@ const escapeProbabilities = (ant, graph, pheromones, params) => {
   const edgeLength = edgeLengthFrom(graph, ant.node);
   const homeScale = homeward.length === 0
     ? 1
-    : Math.max(...homeward.map((neighbor) => pheromones.slow[neighbor] ?? 0));
+    : Math.max(...homeward.map((neighbor) => homeLevel(pheromones, params, neighbor)));
   return normalizeChoices(
     options.map((neighbor) => ({
       node: neighbor,
       weight:
-        (homeward.length === 0 ? 1 : (pheromones.slow[neighbor] ?? 0) / homeScale) *
+        (homeward.length === 0
+          ? 1
+          : homeLevel(pheromones, params, neighbor) / homeScale) *
         Math.pow(1 / edgeLength(neighbor), params.distanceInfluence),
     })),
   );
@@ -900,12 +969,12 @@ export const homewardProbabilities = (
   edgeLength = () => 1,
   edgeBias = () => 1,
 ) => {
-  const here = pheromones.slow[node] ?? 0;
+  const here = homeLevel(pheromones, params, node);
   const hasHomeward = neighbors.some((neighbor) =>
-    (pheromones.slow[neighbor] ?? 0) > here
+    homeLevel(pheromones, params, neighbor) > here
   );
   const progressBias = (neighbor) =>
-    hasHomeward && (pheromones.slow[neighbor] ?? 0) <= here
+    hasHomeward && homeLevel(pheromones, params, neighbor) <= here
       ? 1 - params.homewardPreference
       : 1;
   return signalProbabilities(
@@ -923,6 +992,7 @@ export const homewardProbabilities = (
         edgeField: false,
         influence: params.returnSlowInfluence,
         polarity: params.returnSlowPolarity,
+        transform: (value) => homeCloseness(value, params.homeSignalModel),
       },
     ],
     params,
@@ -1142,9 +1212,26 @@ const arriveReturning = (ant, graph) => {
 const arrive = (ant, graph, pheromones, params) => {
   const returning = ant.mode === "return";
   const potential = params.foodTrailModel === "potential";
+  const distanceArrival = params.homeSignalModel === "distance"
+    ? relaxDistance(
+      pheromones.slow[ant.edge.to],
+      ant.homeDistance,
+      ant.edge.length,
+    )
+    : null;
+  const arrivalAnt = distanceArrival === null
+    ? ant
+    : { ...ant, homeDistance: distanceArrival.distance };
   const source = pheromones.slow[ant.edge.from] ?? 0;
   const mapping = !returning && ant.searchState.kind !== "escape";
-  const slowDeposits = mapping
+  const slowDeposits = distanceArrival !== null
+    ? distanceArrival.update === null ? [] : [{
+      channel: "slow",
+      target: ant.edge.to,
+      amount: distanceArrival.update,
+      combine: "min-distance",
+    }]
+    : mapping
     ? [
       {
         channel: "slow",
@@ -1160,8 +1247,8 @@ const arrive = (ant, graph, pheromones, params) => {
     ]
     : [];
   const result = returning
-    ? arriveReturning(ant, graph)
-    : arriveSearching(ant, graph, pheromones, params);
+    ? arriveReturning(arrivalAnt, graph)
+    : arriveSearching(arrivalAnt, graph, pheromones, params);
   const foundFood = !returning && graph.foods.includes(ant.edge.to);
   const foodDeposit = returning
     ? ant.foodDeposit > EPSILON ? ant.foodDeposit : params.fastDeposit
@@ -1169,8 +1256,14 @@ const arrive = (ant, graph, pheromones, params) => {
     ? result.ant.foodDeposit
     : params.fastDeposit;
   const homeward = returning &&
-    (pheromones.slow[ant.edge.to] ?? 0) >
-      (pheromones.slow[ant.edge.from] ?? 0);
+    (distanceArrival === null
+      ? homeLevel(pheromones, params, ant.edge.to) >
+        homeLevel(pheromones, params, ant.edge.from)
+      : knownDistance(arrivalAnt.homeDistance) &&
+        (
+          !knownDistance(ant.homeDistance) ||
+          arrivalAnt.homeDistance < ant.homeDistance - EPSILON
+        ));
   const potentialDeposits = returning && homeward && potential
     ? [
       {
@@ -1233,6 +1326,33 @@ const edgeEntryDeposits = (ant) =>
     }]
     : [];
 
+const withDeposits = (pheromones, deposits) => {
+  if (deposits.length === 0) return pheromones;
+  const channels = new Set(deposits.map(({ channel }) => channel));
+  const copy = {
+    ...pheromones,
+    ...Object.fromEntries(
+      [...channels].map((channel) => [channel, { ...pheromones[channel] }]),
+    ),
+  };
+  return applyDeposits(copy, deposits);
+};
+
+const withVisibleDeposits = (pheromones, deposits, params) =>
+  params.homeSignalModel === "distance" ||
+    ["potential", "distance"].includes(params.foodTrailModel)
+    ? withDeposits(pheromones, deposits)
+    : pheromones;
+
+const syncHomeDistance = (ant, pheromones, params) => {
+  if (params.homeSignalModel !== "distance" || ant.edge !== null) return ant;
+  const nodeDistance = pheromones.slow[ant.node];
+  return knownDistance(nodeDistance) &&
+      (!knownDistance(ant.homeDistance) || nodeDistance < ant.homeDistance)
+    ? { ...ant, homeDistance: nodeDistance }
+    : ant;
+};
+
 const advanceAnt = (
   ant,
   graph,
@@ -1264,13 +1384,14 @@ const advanceAnt = (
       );
   }
 
-  const discovered = ant.mode === "search" && ant.edge === null &&
-      graph.foods.includes(ant.node)
+  const syncedAnt = syncHomeDistance(ant, pheromones, params);
+  const discovered = syncedAnt.mode === "search" && syncedAnt.edge === null &&
+      graph.foods.includes(syncedAnt.node)
     ? beginReturn(
-      ant,
+      syncedAnt,
       foodDepositAt(
-        ant.node,
-        ant.previous,
+        syncedAnt.node,
+        syncedAnt.previous,
         pheromones,
         params,
       ),
@@ -1281,7 +1402,7 @@ const advanceAnt = (
     const continued = advanceAnt(
       discovered.ant,
       graph,
-      pheromones,
+      withVisibleDeposits(pheromones, discovered.deposits, params),
       params,
       seed,
       dt,
@@ -1295,10 +1416,10 @@ const advanceAnt = (
     };
   }
 
-  const starting = ant.edge === null;
-  const [movingAnt, nextSeed] = ant.edge
-    ? [ant, seed]
-    : startEdge(ant, graph, pheromones, params, seed);
+  const starting = syncedAnt.edge === null;
+  const [movingAnt, nextSeed] = syncedAnt.edge
+    ? [syncedAnt, seed]
+    : startEdge(syncedAnt, graph, pheromones, params, seed);
   if (movingAnt.edge === null) {
     return {
       ant: movingAnt,
@@ -1331,7 +1452,7 @@ const advanceAnt = (
   const continued = advanceAnt(
     arrival.ant,
     graph,
-    pheromones,
+    withVisibleDeposits(pheromones, arrival.deposits, params),
     params,
     nextSeed,
     Math.max(0, dt - secondsUsed),
@@ -1352,6 +1473,13 @@ const advanceAnt = (
 const applyDeposits = (pheromones, deposits) => {
   deposits.forEach((deposit) => {
     const field = pheromones[deposit.channel];
+    if (deposit.combine === "min-distance") {
+      const current = field[deposit.target];
+      field[deposit.target] = knownDistance(current)
+        ? Math.min(current, deposit.amount)
+        : deposit.amount;
+      return;
+    }
     if (deposit.combine === "propagate") {
       const sourceField = pheromones[deposit.sourceChannel ?? deposit.channel];
       const cap = attenuateFood(
@@ -1396,7 +1524,7 @@ const maybeStopExploring = (ant, graph, pheromones, params, seed, dt) => {
   }
   if (ant.searchState.frontierArmed !== true) {
     return params.scoutLifecycle === "complete" &&
-        !hasExplorationProgress(ant, graph, pheromones)
+        !hasExplorationProgress(ant, graph, pheromones, params)
       ? {
         ant: {
           ...ant,
@@ -1406,7 +1534,7 @@ const maybeStopExploring = (ant, graph, pheromones, params, seed, dt) => {
       }
       : { ant, seed };
   }
-  if (hasExplorationProgress(ant, graph, pheromones)) {
+  if (hasExplorationProgress(ant, graph, pheromones, params)) {
     return { ant, seed };
   }
   const [random, nextSeed] = nextRandom(seed);
@@ -1423,6 +1551,7 @@ export const stepSimulation = (state, seconds) => {
   const decayed = anchorHill(
     decayPheromones(state.pheromones, state.params, dt),
     state.graph.hill,
+    state.params,
   );
   const workingPheromones = decayed;
   const advanced = state.ants
@@ -1468,6 +1597,7 @@ export const stepSimulation = (state, seconds) => {
 
 export const updateParams = (state, patch) => {
   const params = sanitizeParams({ ...state.params, ...patch });
+  const homeModelChanged = params.homeSignalModel !== state.params.homeSignalModel;
   const difference = params.antCount - state.ants.length;
   const generated = difference > 0
     ? generateAnts(
@@ -1477,15 +1607,27 @@ export const updateParams = (state, patch) => {
       state.ants.length,
     )
     : { ants: [], rngSeed: state.rngSeed };
+  const resizedAnts = difference === 0
+    ? state.ants
+    : difference < 0
+    ? state.ants.slice(0, params.antCount)
+    : [...state.ants, ...generated.ants];
   return {
     ...state,
     params,
     rngSeed: generated.rngSeed,
-    ants: difference === 0
-      ? state.ants
-      : difference < 0
-      ? state.ants.slice(0, params.antCount)
-      : [...state.ants, ...generated.ants],
+    pheromones: homeModelChanged
+      ? {
+        ...state.pheromones,
+        slow: emptyHomeField(state.graph, params),
+      }
+      : state.pheromones,
+    ants: homeModelChanged
+      ? resizedAnts.map((ant) => ({
+        ...ant,
+        homeDistance: ant.node === state.graph.hill ? 0 : -1,
+      }))
+      : resizedAnts,
   };
 };
 
@@ -1500,7 +1642,7 @@ export const resetRun = (state) => {
     ...state,
     rngSeed: generated.rngSeed,
     elapsed: 0,
-    pheromones: emptyPheromones(state.graph),
+    pheromones: emptyPheromones(state.graph, state.params),
     ants: generated.ants,
     lastEvents: [],
     stats: {
@@ -1517,7 +1659,13 @@ export const resetRun = (state) => {
 
 export const clearPheromones = (state) => ({
   ...state,
-  pheromones: emptyPheromones(state.graph),
+  pheromones: emptyPheromones(state.graph, state.params),
+  ants: state.params.homeSignalModel === "distance"
+    ? state.ants.map((ant) => ({
+      ...ant,
+      homeDistance: ant.node === state.graph.hill ? 0 : -1,
+    }))
+    : state.ants,
 });
 
 const hasNode = (graph, nodeId) => Object.hasOwn(graph.adjacency, nodeId);

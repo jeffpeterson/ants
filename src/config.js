@@ -25,6 +25,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "returnSlowPolarity",
   "homewardPreference",
   "homeReinforcement",
+  "homeSignalModel",
   "slowHalfLife",
   "fastHalfLife",
 ]);
@@ -58,6 +59,9 @@ const migrateParams = (engineId, params) =>
   engineId === CURRENT_ENGINE_ID
     ? {
       ...params,
+      ...(!Object.hasOwn(params, "homeSignalModel")
+        ? { homeSignalModel: "pheromone" }
+        : {}),
       ...(!Object.hasOwn(params, "scoutLifecycle")
         ? { scoutLifecycle: "frontier" }
         : {}),

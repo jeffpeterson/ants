@@ -66,6 +66,14 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
     },
   ),
   builtIn(
+    "synthetic-home-distance",
+    "Synthetic home distance",
+    "Local distance-vector control: ants and nodes exchange only their best known distance from home.",
+    {
+      homeSignalModel: "distance",
+    },
+  ),
+  builtIn(
     "bounded-potential",
     "Bounded food potential",
     "Experimental local food gradient: bounded propagation prevents population-size amplification and non-food peaks.",

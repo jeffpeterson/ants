@@ -974,6 +974,7 @@ const sliderConfigs = [
 const selectConfigs = [
   "scoutLifecycle",
   "foodTrailModel",
+  "homeSignalModel",
 ];
 
 const setControlSupport = (input, name, supported, engine) => {

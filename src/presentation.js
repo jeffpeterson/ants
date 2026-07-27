@@ -1,4 +1,4 @@
-import { getEngine } from "./colony.js";
+import { getEngine, homeCloseness } from "./colony.js";
 import { activeFoodsFor } from "./playground.js";
 
 const positive = (value) => Number.isFinite(value) && value > 0;
@@ -13,9 +13,17 @@ export const trailStrength = (channel, value) => {
 
 const currentTrailView = (simulation) => {
   const edgeFood = simulation.params.foodTrailModel === "edge";
+  const homeNodes = simulation.params.homeSignalModel === "distance"
+    ? Object.fromEntries(
+      Object.entries(simulation.pheromones.slow).map(([node, value]) => [
+        node,
+        homeCloseness(value, "distance"),
+      ]),
+    )
+    : simulation.pheromones.slow;
   return {
     slow: {
-      nodes: simulation.pheromones.slow,
+      nodes: homeNodes,
       edges: EMPTY_FIELD,
       arcs: EMPTY_FIELD,
     },
