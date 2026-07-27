@@ -271,22 +271,18 @@
               <input id="nodeCount" type="range" min="8" max="1200" step="8" value="24">
             </label>
             <label class="slider-row" for="density">
-              <span>Density <output id="density-value">42%</output></span>
+              <span>Connections <output id="density-value">42%</output></span>
               <input id="density" type="range" min="5" max="90" value="42">
             </label>
-            <label class="slider-row" for="islandCount">
-              <span>Islands <output id="islandCount-value">3</output></span>
-              <input id="islandCount" type="range" min="1" max="12" value="3">
-            </label>
-            <label class="slider-row" for="islandSeparation">
-              <span>Island separation <output id="islandSeparation-value">65%</output></span>
-              <input id="islandSeparation" type="range" min="0" max="90" value="65">
-            </label>
-            <label class="slider-row" for="islandLinks">
-              <span>Bridges per link <output id="islandLinks-value">2</output></span>
-              <input id="islandLinks" type="range" min="1" max="6" value="2">
+            <label class="slider-row" for="mapVariation">
+              <span>Map variation <output id="mapVariation-value">0.72</output></span>
+              <input id="mapVariation" type="range" min="0" max="100" value="72">
             </label>
           </div>
+          <p class="muted">
+            Higher variation loosens spacing and route selection, producing
+            more clusters, bottlenecks, and occasional long connections.
+          </p>
           <div class="seed-row">
             <label for="seed">Graph seed</label>
             <input id="seed" type="number" min="0" max="4294967295" value="1837">

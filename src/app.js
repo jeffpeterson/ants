@@ -782,14 +782,12 @@ const sliderConfigs = [
     (value) => `${value}%`,
     (value) => value * 100,
   ],
-  ["islandCount", Number, (value) => `${value}`, (value) => value],
   [
-    "islandSeparation",
+    "mapVariation",
     (value) => Number(value) / 100,
-    (value) => `${value}%`,
+    (value) => (Number(value) / 100).toFixed(2),
     (value) => value * 100,
   ],
-  ["islandLinks", Number, (value) => `${value}`, (value) => value],
 ];
 
 const syncControls = (simulation) => {

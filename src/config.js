@@ -20,9 +20,7 @@ export const ALGORITHM_KEYS = Object.freeze([
 export const GRAPH_KEYS = Object.freeze([
   "nodeCount",
   "density",
-  "islandCount",
-  "islandSeparation",
-  "islandLinks",
+  "mapVariation",
 ]);
 
 export const selectParameters = (params, keys) =>

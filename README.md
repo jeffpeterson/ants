@@ -19,11 +19,13 @@ deno task test
 
 ## Algorithm
 
-The generator builds one or more spatial islands, gives each island a connected local
-backbone, and joins the islands with a configurable number of explicit bridges. Every
-map remains connected from 8 through 1,200 nodes. Ants move at one physical speed:
-crossing an edge takes `edge.length / speed`, so shorter routes permit more laps and
-more reinforcement per minute.
+The generator blends an even low-discrepancy layout toward increasingly loose, clustered
+placement, then builds a minimum-length connected backbone and adds seeded local or
+occasional long connections. One map-variation control changes spatial and topological
+irregularity without exposing implementation-shaped island controls. Every map remains
+connected from 8 through 1,200 nodes. Ants move at one physical speed: crossing an edge
+takes `edge.length / speed`, so shorter routes permit more laps and more reinforcement
+per minute.
 
 The colony stores two scalar levels at every node:
 
@@ -88,8 +90,8 @@ set.
 - The persistent load carried from the hill is one chemical scalar, not a path record.
 - Ant speed is constant in physical graph units. Long edges and routes take
   proportionally longer to traverse.
-- Every generated island is bridged into one connected graph. One bridge per island link
-  creates a bottleneck; higher link counts create alternate crossings.
+- Every generated map has a minimum spanning backbone, so irregular clusters and
+  bottlenecks never become disconnected components.
 - Food edits preserve the running ants and both fields. Old food signal evaporates while
   the colony searches for the new source.
 
@@ -105,10 +107,10 @@ pheromone-only graph model.
 Straight pheromone need not encode polarity.
 [Jackson et al.](https://doi.org/10.1038/nature03105) found that Pharaoh's ants obtain
 trail polarity from branch geometry, while
-[Czaczkes et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC8837658/) found that naïve
-_Lasius niger_ workers could not infer destination direction from pheromone alone on a
-one-way trail. The default heading bias represents local geometry; every polarity
-control remains optional.
+[Sakamoto and Sakiyama](https://pmc.ncbi.nlm.nih.gov/articles/PMC8837658/) found that
+naïve _Lasius niger_ workers initially chose directions at random when joining a one-way
+trail. The default heading bias represents local geometry; every polarity control
+remains optional.
 
 The probability rule follows the local proportional response measured by
 [Perna et al.](https://doi.org/10.1371/journal.pcbi.1002592) and the linear-flow

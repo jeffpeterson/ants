@@ -52,50 +52,55 @@ Deno.test("seeded random values are reproducible and explicit", () => {
   assert(nextRandom(42)[1] !== 42);
 });
 
-Deno.test("clustered maps are deterministic, connected, and explicitly bridged", () => {
+Deno.test("varied maps are deterministic, connected, and implementation-neutral", () => {
   const values = {
     nodeCount: 48,
     density: 0.35,
-    islandCount: 4,
-    islandSeparation: 0.8,
-    islandLinks: 1,
+    mapVariation: 0.8,
   };
   const [first] = generateGraph(8128, values);
   const [second] = generateGraph(8128, values);
-  const bridges = first.edges.filter((edge) =>
-    first.nodes[edge.a].island !== first.nodes[edge.b].island
-  );
   assertEquals(first, second);
   assert(isConnected(first));
-  assertEquals(first.islandCount, 4);
-  assertEquals(bridges.length, first.islandCount - 1);
+  assert(first.nodes.every((node) => !Object.hasOwn(node, "island")));
+  assert(!Object.hasOwn(first, "islandCount"));
   assert(first.hill !== first.foods[0]);
 });
 
-Deno.test("bridge redundancy and separation controls change the generated map", () => {
+Deno.test("variation loosens geometry while connections control edge count", () => {
+  const [calm] = generateGraph(5, {
+    nodeCount: 64,
+    density: 0.42,
+    mapVariation: 0,
+  });
+  const [varied] = generateGraph(5, {
+    nodeCount: 64,
+    density: 0.42,
+    mapVariation: 1,
+  });
+  const edgeSpread = (graph) => {
+    const lengths = graph.edges
+      .map((edge) => edge.length)
+      .toSorted((first, second) => first - second);
+    return lengths.at(-1) / lengths[Math.floor(lengths.length / 2)];
+  };
+  assertEquals(calm.edges.length, varied.edges.length);
+  assert(edgeSpread(varied) > edgeSpread(calm) * 2);
+  assert(
+    calm.nodes.some((node, index) => Math.abs(node.x - varied.nodes[index].x) > 0.02),
+  );
+
   const [sparse] = generateGraph(5, {
     nodeCount: 64,
-    islandCount: 4,
-    islandLinks: 1,
-    islandSeparation: 0.9,
+    density: 0.05,
+    mapVariation: 0.7,
   });
-  const [redundant] = generateGraph(5, {
+  const [dense] = generateGraph(5, {
     nodeCount: 64,
-    islandCount: 4,
-    islandLinks: 4,
-    islandSeparation: 0,
+    density: 0.9,
+    mapVariation: 0.7,
   });
-  const crossEdges = (graph) =>
-    graph.edges.filter((edge) =>
-      graph.nodes[edge.a].island !== graph.nodes[edge.b].island
-    );
-  assertEquals(crossEdges(sparse).length, 3);
-  assertEquals(crossEdges(redundant).length, 12);
-  assert(
-    sparse.nodes.some((node, index) =>
-      Math.abs(node.x - redundant.nodes[index].x) > 0.02
-    ),
-  );
+  assert(dense.edges.length > sparse.edges.length);
 });
 
 Deno.test("maximum maps stay sparse, connected, bounded, and quick", () => {
@@ -103,9 +108,7 @@ Deno.test("maximum maps stay sparse, connected, bounded, and quick", () => {
   const [graph] = generateGraph(77, {
     nodeCount: 1_200,
     density: 0.9,
-    islandCount: 12,
-    islandLinks: 6,
-    islandSeparation: 0.9,
+    mapVariation: 1,
   });
   const duration = performance.now() - startedAt;
   assertEquals(graph.nodes.length, 1_200);
@@ -260,7 +263,7 @@ Deno.test("simulation transitions are immutable", () => {
     seed: 93,
     params: {
       nodeCount: 8,
-      islandCount: 2,
+      mapVariation: 0.7,
       density: 0.8,
       antCount: 48,
       speed: 0.6,
@@ -279,7 +282,7 @@ const adaptationFixture = () =>
       seed: 93,
       params: {
         nodeCount: 8,
-        islandCount: 2,
+        mapVariation: 0.7,
         density: 0.8,
         antCount: 24,
         speed: 0.6,
@@ -331,8 +334,7 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
   const simulation = createSimulation({
     seed: 123,
     params: {
-      islandCount: 4,
-      islandLinks: 1,
+      mapVariation: 0.9,
       outboundPolarity: -2,
       exploreSignalBias: 3,
     },
@@ -342,9 +344,10 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
   const algorithm = algorithmPreset(simulation);
   const map = mapPreset(simulation);
   assertEquals(algorithm.outboundPolarity, -2);
-  assert(!Object.hasOwn(algorithm, "islandCount"));
-  assertEquals(map.params.islandCount, 4);
+  assert(!Object.hasOwn(algorithm, "mapVariation"));
+  assertEquals(map.params.mapVariation, 0.9);
   assert(!Object.hasOwn(map.params, "outboundPolarity"));
+  assert(!Object.hasOwn(map.params, "islandCount"));
 
   const configuration = sharedConfiguration(simulation);
   assertEquals(
@@ -368,13 +371,14 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "returnSlowInfluence",
     "returnFastPolarity",
     "returnSlowPolarity",
-    "islandCount",
-    "islandSeparation",
-    "islandLinks",
+    "mapVariation",
     "algorithm-presets",
     "map-presets",
     "copy-share-link",
   ].forEach((id) => assert(html.includes(`id="${id}"`), `Missing ${id}`));
+  ["islandCount", "islandSeparation", "islandLinks"].forEach((id) =>
+    assert(!html.includes(`id="${id}"`), `Obsolete ${id}`)
+  );
 });
 
 Deno.test("saved map endpoints reproduce on the same graph recipe", () => {

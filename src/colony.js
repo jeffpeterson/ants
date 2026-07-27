@@ -1,9 +1,7 @@
 export const DEFAULTS = Object.freeze({
   nodeCount: 24,
   density: 0.42,
-  islandCount: 3,
-  islandSeparation: 0.65,
-  islandLinks: 2,
+  mapVariation: 0.72,
   antCount: 64,
   exploreRate: 0.02,
   stopExploreChance: 0.12,
@@ -41,16 +39,10 @@ export const sanitizeParams = (values = {}) => ({
     clamp(8, 1_200, finiteOr(DEFAULTS.nodeCount, values.nodeCount)),
   ),
   density: clamp(0.05, 0.9, finiteOr(DEFAULTS.density, values.density)),
-  islandCount: Math.round(
-    clamp(1, 12, finiteOr(DEFAULTS.islandCount, values.islandCount)),
-  ),
-  islandSeparation: clamp(
+  mapVariation: clamp(
     0,
-    0.9,
-    finiteOr(DEFAULTS.islandSeparation, values.islandSeparation),
-  ),
-  islandLinks: Math.round(
-    clamp(1, 6, finiteOr(DEFAULTS.islandLinks, values.islandLinks)),
+    1,
+    finiteOr(DEFAULTS.mapVariation, values.mapVariation),
   ),
   antCount: Math.round(clamp(8, 120, finiteOr(DEFAULTS.antCount, values.antCount))),
   exploreRate: clamp(
@@ -133,82 +125,68 @@ const distance = (first, second) => Math.hypot(first.x - second.x, first.y - sec
 export const edgeKey = (first, second) =>
   first < second ? `${first}:${second}` : `${second}:${first}`;
 
-const gridShape = (count) => {
-  const columns = Math.ceil(Math.sqrt(count * 1.08));
-  return { columns, rows: Math.ceil(count / columns) };
-};
+const mix = (from, to, amount) => from + (to - from) * amount;
 
-const islandSizes = (count, islands) =>
-  Array.from(
-    { length: islands },
-    (_, island) => Math.floor(count / islands) + Number(island < count % islands),
+const wrap = (value) => ((value % 1) + 1) % 1;
+
+const radicalInverse = (value, base, factor = 1, total = 0) =>
+  value === 0 ? total : radicalInverse(
+    Math.floor(value / base),
+    base,
+    factor / base,
+    total + value % base * factor / base,
   );
 
-const describeIslands = (count, requested) => {
-  const total = Math.min(requested, Math.max(1, Math.floor(count / 2)));
-  const layout = gridShape(total);
-  return islandSizes(count, total).reduce(
-    ({ islands, start }, size, id) => {
-      const shape = gridShape(size);
+const generateNodes = (count, variation, seed) => {
+  const [[phaseX, phaseY], initialSeed] = randomPair(seed);
+  const heat = variation * variation;
+  const freedom = heat;
+  const warpAmount = heat * 0.08;
+  const anchors = Array.from(
+    { length: 3 + Math.floor(phaseX * 4) },
+    (_, index) => ({
+      x: wrap(radicalInverse(index + 1, 2) + phaseX),
+      y: wrap(radicalInverse(index + 1, 3) + phaseY),
+    }),
+  );
+  return Array.from({ length: count }).reduce(
+    ({ nodes, rngSeed }, _, id) => {
+      const [[randomX, randomY], nextSeed] = randomPair(rngSeed);
+      const evenX = wrap(radicalInverse(id + 1, 2) + phaseX);
+      const evenY = wrap(radicalInverse(id + 1, 3) + phaseY);
+      const looseX = mix(evenX, randomX, freedom);
+      const looseY = mix(evenY, randomY, freedom);
+      const anchor = anchors.reduce((closest, candidate) =>
+        distance({ x: looseX, y: looseY }, candidate) <
+            distance({ x: looseX, y: looseY }, closest)
+          ? candidate
+          : closest
+      );
+      const clusterPull = heat * variation * 0.38;
+      const clusteredX = mix(looseX, anchor.x, clusterPull);
+      const clusteredY = mix(looseY, anchor.y, clusterPull);
+      const x = wrap(
+        clusteredX +
+          Math.sin((clusteredY * 1.7 + phaseX) * Math.PI * 2) * warpAmount,
+      );
+      const y = wrap(
+        clusteredY +
+          Math.sin((clusteredX * 1.3 + phaseY) * Math.PI * 2) * warpAmount,
+      );
       return {
-        islands: [
-          ...islands,
+        nodes: [
+          ...nodes,
           {
             id,
-            start,
-            size,
-            columns: shape.columns,
-            rows: shape.rows,
-            mapColumn: id % layout.columns,
-            mapRow: Math.floor(id / layout.columns),
+            x: 0.04 + x * 0.92,
+            y: 0.04 + y * 0.92,
           },
         ],
-        start: start + size,
+        rngSeed: nextSeed,
       };
     },
-    { islands: [], start: 0 },
-  ).islands;
-};
-
-const generateNodes = (count, requestedIslands, separation, seed) => {
-  const islands = describeIslands(count, requestedIslands);
-  const layout = gridShape(islands.length);
-  const cellWidth = 0.88 / layout.columns;
-  const cellHeight = 0.84 / layout.rows;
-  const spread = 0.9 - separation * 0.72;
-  const generated = islands.reduce(
-    ({ nodes, rngSeed }, island) => {
-      const centerX = 0.06 + (island.mapColumn + 0.5) * cellWidth;
-      const centerY = 0.08 + (island.mapRow + 0.5) * cellHeight;
-      return Array.from({ length: island.size }).reduce(
-        (result, _, localIndex) => {
-          const [[jitterX, jitterY], nextSeed] = randomPair(result.rngSeed);
-          const column = localIndex % island.columns;
-          const row = Math.floor(localIndex / island.columns);
-          const localX = (column + 0.14 + jitterX * 0.72) /
-              island.columns -
-            0.5;
-          const localY = (row + 0.14 + jitterY * 0.72) / island.rows -
-            0.5;
-          return {
-            nodes: [
-              ...result.nodes,
-              {
-                id: island.start + localIndex,
-                island: island.id,
-                x: centerX + localX * cellWidth * spread,
-                y: centerY + localY * cellHeight * spread,
-              },
-            ],
-            rngSeed: nextSeed,
-          };
-        },
-        { nodes, rngSeed },
-      );
-    },
-    { nodes: [], rngSeed: seed >>> 0 },
+    { nodes: [], rngSeed: initialSeed },
   );
-  return { ...generated, islands };
 };
 
 const makeEdge = (nodes, first, second) => ({
@@ -218,99 +196,71 @@ const makeEdge = (nodes, first, second) => ({
   length: distance(nodes[first], nodes[second]),
 });
 
-const LOCAL_OFFSETS = Object.freeze([
-  [-1, 0],
-  [0, -1],
-  [-1, -1],
-  [1, -1],
-  [-2, 0],
-  [0, -2],
-]);
-
-const GRID_OFFSETS = Object.freeze([
-  [-1, 0],
-  [0, -1],
-]);
-
-const edgesForOffsets = (nodes, islands, offsets) =>
-  islands.flatMap((island) =>
-    Array.from({ length: island.size }).flatMap((_, localIndex) => {
-      const column = localIndex % island.columns;
-      const row = Math.floor(localIndex / island.columns);
-      return offsets.flatMap(([columnOffset, rowOffset]) => {
-        const otherColumn = column + columnOffset;
-        const otherRow = row + rowOffset;
-        const otherIndex = otherRow * island.columns + otherColumn;
-        const valid = otherColumn >= 0 &&
-          otherColumn < island.columns &&
-          otherRow >= 0 &&
-          otherRow < island.rows &&
-          otherIndex >= 0 &&
-          otherIndex < island.size;
-        return valid
-          ? [
-            makeEdge(
-              nodes,
-              island.start + localIndex,
-              island.start + otherIndex,
-            ),
-          ]
-          : [];
-      });
-    })
+const nearestPriorEdges = (nodes, count = 7) =>
+  nodes.slice(1).map((node) =>
+    nodes
+      .slice(0, node.id)
+      .map((candidate) => makeEdge(nodes, node.id, candidate.id))
+      .toSorted((left, right) => left.length - right.length)
+      .slice(0, count)
   );
 
-const islandCenter = (nodes, island) => {
-  const members = nodes.slice(island.start, island.start + island.size);
-  return members.reduce(
-    (center, node) => ({
-      x: center.x + node.x / members.length,
-      y: center.y + node.y / members.length,
-    }),
-    { x: 0, y: 0 },
-  );
-};
-
-const bridgePairs = (nodes, first, second, count) =>
-  nodes
-    .slice(first.start, first.start + first.size)
-    .flatMap((from) =>
-      nodes
-        .slice(second.start, second.start + second.size)
-        .map((to) => makeEdge(nodes, from.id, to.id))
-    )
-    .reduce(
-      (closest, edge) =>
-        [...closest, edge]
-          .toSorted((left, right) => left.length - right.length)
-          .slice(0, count),
-      [],
-    );
-
-const bridgeEdges = (nodes, islands, count) => {
-  const centers = islands.map((island) => islandCenter(nodes, island));
-  return islands.slice(1).flatMap((island, offset) => {
-    const index = offset + 1;
-    const parent = islands
-      .slice(0, index)
-      .reduce((nearest, candidate) =>
-        distance(centers[index], centers[candidate.id]) <
-            distance(centers[index], centers[nearest.id])
-          ? candidate
-          : nearest
+const minimumSpanningTree = (nodes) =>
+  Array.from({ length: nodes.length - 1 }).reduce(
+    ({ edges, seen, best }) => {
+      const target = nodes.reduce(
+        (closest, node) =>
+          seen.has(node.id) ||
+            (closest !== null && best[closest].length <= best[node.id].length)
+            ? closest
+            : node.id,
+        null,
       );
-    return bridgePairs(nodes, island, parent, count);
-  });
-};
+      const nextSeen = new Set([...seen, target]);
+      return {
+        edges: [...edges, best[target]],
+        seen: nextSeen,
+        best: best.map((edge, node) => {
+          if (nextSeen.has(node)) return edge;
+          const candidate = makeEdge(nodes, target, node);
+          return candidate.length < edge.length ? candidate : edge;
+        }),
+      };
+    },
+    {
+      edges: [],
+      seen: new Set([0]),
+      best: nodes.map((node) => node.id === 0 ? null : makeEdge(nodes, 0, node.id)),
+    },
+  ).edges;
 
-const scoreCandidates = (candidates, seed) =>
+const randomPriorEdges = (nodes, variation, seed) =>
+  nodes.slice(2).reduce(
+    ({ edges, rngSeed }, node) => {
+      const [[chance, target], nextSeed] = randomPair(rngSeed);
+      return {
+        edges: chance < variation * variation * 0.5
+          ? [...edges, makeEdge(nodes, node.id, Math.floor(target * node.id))]
+          : edges,
+        rngSeed: nextSeed,
+      };
+    },
+    { edges: [], rngSeed: seed },
+  );
+
+const uniqueEdges = (edges) =>
+  Object.values(Object.fromEntries(edges.map((edge) => [edge.id, edge])));
+
+const scoreCandidates = (candidates, variation, seed) =>
   candidates.reduce(
     ({ scored, rngSeed }, edge) => {
       const [random, nextSeed] = nextRandom(rngSeed);
+      const lengthBias = Math.pow(edge.length, 1 - variation * 0.82);
+      const randomness = Math.exp((random - 0.5) * variation * 3.5);
       return {
         scored: [
           ...scored,
-          { edge, score: edge.length * (0.78 + random * 0.62) },
+          { edge, score: lengthBias * randomness },
         ],
         rngSeed: nextSeed,
       };
@@ -344,31 +294,29 @@ export const generateGraph = (seed, values = {}) => {
   const params = sanitizeParams(values);
   const generated = generateNodes(
     params.nodeCount,
-    params.islandCount,
-    params.islandSeparation,
+    params.mapVariation,
     seed,
   );
-  const backbone = edgesForOffsets(
-    generated.nodes,
-    generated.islands,
-    GRID_OFFSETS,
-  );
-  const bridges = bridgeEdges(
-    generated.nodes,
-    generated.islands,
-    params.islandLinks,
-  );
-  const required = [...backbone, ...bridges];
+  const localGroups = nearestPriorEdges(generated.nodes);
+  const required = minimumSpanningTree(generated.nodes);
   const requiredIds = new Set(required.map((edge) => edge.id));
-  const optional = edgesForOffsets(
+  const random = randomPriorEdges(
     generated.nodes,
-    generated.islands,
-    LOCAL_OFFSETS,
-  ).filter((edge) => !requiredIds.has(edge.id));
-  const scored = scoreCandidates(optional, generated.rngSeed);
+    params.mapVariation,
+    generated.rngSeed,
+  );
+  const optional = uniqueEdges([
+    ...localGroups.flat(),
+    ...random.edges,
+  ]).filter((edge) => !requiredIds.has(edge.id));
+  const scored = scoreCandidates(
+    optional,
+    params.mapVariation,
+    random.rngSeed,
+  );
   const extraCount = Math.min(
     optional.length,
-    Math.round(params.nodeCount * params.density * 0.9),
+    Math.round(params.nodeCount * params.density * 1.6),
   );
   const extras = scored.scored
     .toSorted((first, second) => first.score - second.score)
@@ -387,7 +335,6 @@ export const generateGraph = (seed, values = {}) => {
       edgeById: Object.fromEntries(edges.map((edge) => [edge.id, edge])),
       hill: endpoints.first,
       foods: [endpoints.second],
-      islandCount: generated.islands.length,
     },
     scored.rngSeed,
   ];
@@ -476,9 +423,7 @@ const emptyPheromones = (graph) => ({
 const graphParameters = (params) => ({
   nodeCount: params.nodeCount,
   density: params.density,
-  islandCount: params.islandCount,
-  islandSeparation: params.islandSeparation,
-  islandLinks: params.islandLinks,
+  mapVariation: params.mapVariation,
 });
 
 const makeAnt = (id, hill) => ({
