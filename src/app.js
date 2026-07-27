@@ -19,8 +19,16 @@ import {
   mapPreset,
   sharedConfiguration,
 } from "./config.js";
+import { CONTROL_HELP } from "./help.js";
 
 const byId = (id) => document.getElementById(id);
+
+Object.entries(CONTROL_HELP).forEach(([id, description]) => {
+  const control = byId(id);
+  control.title = description;
+  control.setAttribute("aria-description", description);
+});
+
 const canvas = byId("colony-canvas");
 const context = canvas.getContext("2d");
 const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;

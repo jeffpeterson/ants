@@ -22,6 +22,7 @@ import {
   mapPreset,
   sharedConfiguration,
 } from "../src/config.js";
+import { CONTROL_HELP } from "../src/help.js";
 
 const assert = (condition, message = "Assertion failed") => {
   if (!condition) throw new Error(message);
@@ -384,6 +385,18 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   assert(html.includes("signal-food"));
   assert(css.includes(".signal-persistent input"));
   assert(css.includes(".signal-food input"));
+});
+
+Deno.test("every interactive control has help text", async () => {
+  const html = await Deno.readTextFile(new URL("../index.html", import.meta.url));
+  const controlIds = [...html.matchAll(
+    /<(?:button|input|select|canvas)\b[^>]*\bid="([^"]+)"/gu,
+  )].map(([, id]) => id);
+
+  assertEquals(controlIds.toSorted(), Object.keys(CONTROL_HELP).toSorted());
+  Object.values(CONTROL_HELP).forEach((description) =>
+    assert(description.length > 20, "Control help should explain behavior")
+  );
 });
 
 Deno.test("saved map endpoints reproduce on the same graph recipe", () => {
