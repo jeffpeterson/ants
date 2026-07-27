@@ -10,7 +10,7 @@ import {
 } from "./colony.js";
 import { ALGORITHM_KEYS } from "./config.js";
 
-export const EVALUATION_VERSION = 1;
+export const EVALUATION_VERSION = 2;
 
 export const OPTIMIZED_KEYS = Object.freeze([
   "exploreRate",
