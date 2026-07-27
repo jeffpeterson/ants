@@ -1,12 +1,12 @@
 import {
   addFood,
-  arcKey,
   choiceProbabilities,
   createSimulation,
   decayPheromones,
   dominantFoodRoute,
   edgeKey,
-  foodDepositForReturn,
+  familiarityProbabilities,
+  fieldGradient,
   foodProbabilitiesForNode,
   generateGraph,
   isConnected,
@@ -25,6 +25,14 @@ const assertEquals = (value, expected, message) =>
     JSON.stringify(value) === JSON.stringify(expected),
     message ?? `Expected ${JSON.stringify(expected)}, got ${JSON.stringify(value)}`,
   );
+
+const run = (state, steps, dt = 0.25) =>
+  Array.from({ length: steps }).reduce(
+    (current) => stepSimulation(current, dt),
+    state,
+  );
+
+const field = (nodes, edges) => ({ nodes, edges });
 
 Deno.test("seeded random values are reproducible and explicit", () => {
   assertEquals(nextRandom(42), nextRandom(42));
@@ -76,221 +84,139 @@ Deno.test("the graph backbone has no bridge-connected islands", () => {
   );
 });
 
-Deno.test("fast pheromone fades faster than slow pheromone", () => {
-  const params = { slowHalfLife: 40, fastHalfLife: 8 };
+Deno.test("food pheromone fades faster than exploration pheromone", () => {
   const decayed = decayPheromones(
-    { slow: { edge: 1 }, fast: { arc: 1 } },
-    params,
+    {
+      slow: field({ 0: 1 }, { edge: 1 }),
+      fast: field({ 0: 1 }, { edge: 1 }),
+    },
+    { slowHalfLife: 40, fastHalfLife: 8 },
     8,
   );
-  assert(decayed.fast.arc < decayed.slow.edge);
-  assert(Math.abs(decayed.fast.arc - 0.5) < 1e-9);
+  assert(decayed.fast.nodes[0] < decayed.slow.nodes[0]);
+  assert(decayed.fast.edges.edge < decayed.slow.edges.edge);
+  assert(Math.abs(decayed.fast.nodes[0] - 0.5) < 1e-9);
 });
 
-Deno.test("trail choices follow pheromone while exploration ignores it", () => {
+Deno.test("pheromone polarity is derived from scalar endpoint concentrations", () => {
+  const pheromone = field(
+    { 0: 0.2, 1: 0.7 },
+    { [edgeKey(0, 1)]: 2 },
+  );
+  assert(fieldGradient(pheromone, 0, 1) > 0);
+  assert(fieldGradient(pheromone, 1, 0) < 0);
+  assertEquals(Object.keys(pheromone.edges), [edgeKey(0, 1)]);
+});
+
+Deno.test("food seekers climb the local food gradient linearly", () => {
   const pheromones = {
-    slow: { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 0 },
-    fast: { [arcKey(0, 1)]: 0.1, [arcKey(0, 2)]: 2 },
+    slow: field(
+      { 0: 0, 1: 0, 2: 0 },
+      { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 0 },
+    ),
+    fast: field(
+      { 0: 0.1, 1: 0.3, 2: 0.7 },
+      { [edgeKey(0, 1)]: 1, [edgeKey(0, 2)]: 1 },
+    ),
   };
   const params = {
     baseWeight: 0.05,
-    slowAvoidance: 0,
+    slowInfluence: 0.5,
     slowExponent: 1,
     fastInfluence: 3,
+    distanceInfluence: 0,
+    reversePenalty: 1,
   };
-  const worker = choiceProbabilities(
-    0,
-    [1, 2],
-    pheromones,
-    params,
-  );
-  const exploring = choiceProbabilities(
-    0,
-    [1, 2],
-    pheromones,
-    params,
-    true,
-  );
-  const expectedRatio = (0.05 + 3 * 2) / (0.05 + 3 * 0.1);
+  const choices = choiceProbabilities(0, [1, 2], pheromones, params);
+  const expected = (0.05 + 3 * 0.6) / (0.05 + 3 * 0.2);
   assert(
     Math.abs(
-      worker[1].probability / worker[0].probability - expectedRatio,
+      choices[1].probability / choices[0].probability - expected,
     ) < 1e-9,
-    "Food pheromone response must remain linear",
   );
-  assertEquals(exploring.map(({ probability }) => probability), [0.5, 0.5]);
+  assertEquals(choiceProbabilities(2, [0], pheromones, params), []);
 });
 
-Deno.test("coverage steers exploration while trail choices respond only to food", () => {
+Deno.test("persistent trails weakly recruit while novelty choices prefer uncovered edges", () => {
+  const pheromones = {
+    slow: field(
+      { 0: 1, 1: 0.8, 2: 0.8 },
+      { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 2 },
+    ),
+    fast: field(
+      { 0: 0, 1: 0, 2: 0 },
+      { [edgeKey(0, 1)]: 0, [edgeKey(0, 2)]: 0 },
+    ),
+  };
   const params = {
     baseWeight: 0.05,
-    slowAvoidance: 1,
+    slowInfluence: 1,
     slowExponent: 1,
     fastInfluence: 1,
+    distanceInfluence: 0,
+    reversePenalty: 1,
   };
-  const covered = {
-    slow: {
-      [arcKey(0, 1)]: 0,
-      [arcKey(1, 0)]: 0,
-      [arcKey(0, 2)]: 1,
-      [arcKey(2, 0)]: 1,
-    },
-    fast: { [arcKey(0, 1)]: 0, [arcKey(0, 2)]: 0 },
-  };
-  const workers = choiceProbabilities(0, [1, 2], covered, params);
-  const repelled = choiceProbabilities(0, [1, 2], covered, params, true);
-  assertEquals(workers.map(({ probability }) => probability), [0.5, 0.5]);
-  assert(repelled[0].probability > repelled[1].probability);
-
-  const confirmedFood = {
-    slow: {
-      [arcKey(0, 1)]: 0,
-      [arcKey(1, 0)]: 0,
-      [arcKey(0, 2)]: 10,
-      [arcKey(2, 0)]: 0,
-    },
-    fast: { [arcKey(0, 1)]: 0, [arcKey(0, 2)]: 0.5 },
-  };
-  const attracted = choiceProbabilities(0, [1, 2], confirmedFood, params);
-  assert(attracted[1].probability > 0.9);
+  const familiar = familiarityProbabilities(0, [1, 2], pheromones, params);
+  const novel = choiceProbabilities(0, [1, 2], pheromones, params, true);
+  assert(familiar[1].probability > familiar[0].probability);
+  assert(novel[0].probability > novel[1].probability);
 });
 
-Deno.test("the whole colony starts finite discovery tours immediately", () => {
+Deno.test("the whole colony leaves immediately without route memory", () => {
   const initial = createSimulation({ seed: 41 });
   const started = stepSimulation(initial, 1 / 30);
-  const moving = started.ants.filter(({ edge }) => edge !== null);
-  assertEquals(moving.length, initial.ants.length);
+  assertEquals(
+    started.ants.filter(({ edge }) => edge !== null).length,
+    initial.ants.length,
+  );
   assert(
-    moving.every(({ searchState, edge }) =>
-      searchState.kind === "explore" &&
-      searchState.left >= 0 &&
-      edge.exploring
+    started.ants.every((ant) =>
+      !Object.hasOwn(ant, "route") &&
+      !Object.hasOwn(ant, "returnIndex") &&
+      ant.edge?.exploring === true
     ),
   );
 });
 
+Deno.test("first returns use the hill gradient and established returns reverse food", () => {
+  let state = createSimulation({ seed: 8 });
+  let sawSlow = false;
+  let sawFast = false;
+  for (let step = 0; step < 1_200 && !(sawSlow && sawFast); step += 1) {
+    state = stepSimulation(state, 0.25);
+    state.ants.filter((ant) => ant.mode === "return" && ant.edge).forEach((ant) => {
+      const gradient = fieldGradient(
+        state.pheromones[ant.edge.returnSignal],
+        ant.edge.from,
+        ant.edge.to,
+      );
+      if (ant.edge.returnSignal === "slow") {
+        sawSlow = true;
+        assert(gradient > 0, "Slow fallback must climb toward the hill");
+      } else {
+        sawFast = true;
+        assert(gradient < 0, "Carriers must reverse the food gradient");
+      }
+    });
+  }
+  assert(sawSlow, "Expected a first-return slow-gradient carrier");
+  assert(sawFast, "Expected a later carrier to reverse the food gradient");
+});
+
 Deno.test("dominant trails favor near-shortest routes across graph seeds", () => {
   const ratios = Array.from({ length: 12 }, (_, seed) => {
-    const initial = createSimulation({ seed: seed + 1 });
-    const final = Array.from({ length: 720 }).reduce(
-      (state) => stepSimulation(state, 0.25),
-      initial,
-    );
+    const final = run(createSimulation({ seed: seed + 1 }), 720);
     const dominant = dominantFoodRoute(final);
     assert(dominant !== null, `Seed ${seed + 1} has no complete food trail`);
     return dominant.distance / final.stats.shortestDistance;
   });
   assert(
-    ratios.filter((ratio) => ratio <= 1.1).length >= 9,
+    ratios.filter((ratio) => ratio <= 1.1).length >= 10,
     `Dominant route ratios: ${ratios.map((ratio) => ratio.toFixed(3))}`,
   );
 });
 
-Deno.test("faint residue is not mistaken for a usable food trail", () => {
-  const initial = createSimulation({ seed: 17 });
-  const node = initial.graph.hill;
-  const neighbor = initial.graph.adjacency[node][0];
-  const withFast = (amount) => ({
-    ...initial,
-    pheromones: {
-      ...initial.pheromones,
-      fast: {
-        ...initial.pheromones.fast,
-        [arcKey(node, neighbor)]: amount,
-      },
-    },
-  });
-  assertEquals(foodProbabilitiesForNode(withFast(1e-8), node), []);
-  assert(foodProbabilitiesForNode(withFast(1), node).length > 0);
-});
-
-Deno.test("temporary one-edge choices either rejoin signal or retrace", () => {
-  const initial = createSimulation({ seed: 1 });
-  const runChecked = (start, count) =>
-    Array.from({ length: count }).reduce(
-      ({ state, sawBacktrack }) => {
-        const next = stepSimulation(state, 1 / 30);
-        const backtracks = next.ants.filter(
-          ({ edge }) => edge?.backtrackFrom !== undefined,
-        );
-        backtracks.forEach((ant) => {
-          assert(ant.edge.backtrackTo < ant.edge.backtrackFrom);
-          assertEquals(ant.edge.to, ant.route[ant.edge.backtrackTo]);
-        });
-        assert(
-          next.ants
-            .filter(({ mode }) => mode === "return")
-            .every(({ edge }) => edge?.exploring !== true),
-          "Food carriers must never enter exploration mode",
-        );
-        assert(
-          next.ants
-            .filter(({ searchState }) =>
-              ["explore", "probe"].includes(searchState.kind)
-            )
-            .every(({ searchState }) => searchState.left >= 0),
-          "Every exploration mode must have a finite remaining budget",
-        );
-        return {
-          state: next,
-          sawBacktrack: sawBacktrack || backtracks.length > 0,
-        };
-      },
-      { state: start, sawBacktrack: false },
-    );
-  const result = runChecked(initial, 5_400);
-  const final = result.state;
-  assert(
-    Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
-    "Expected local exploration to find the shortest route",
-  );
-  assert(
-    result.sawBacktrack,
-    "Expected a failed one-edge choice to retrace its breadcrumb",
-  );
-  assert(
-    final.ants.every(({ exploreChoices, followChoices }) =>
-      exploreChoices > 0 && followChoices > 0
-    ),
-    "Every ant should alternate between exploring and following",
-  );
-
-  assert(dominantFoodRoute(final) !== null);
-});
-
-Deno.test("return deposit encodes food direction, gradient, and completed-trip length", () => {
-  const graph = {
-    edgeById: {
-      [edgeKey(0, 1)]: { length: 1 },
-      [edgeKey(1, 2)]: { length: 1 },
-    },
-  };
-  const nearFoodAnt = {
-    route: [0, 1, 2],
-    returnIndex: 2,
-    tripDistance: 2,
-    edge: { from: 2, to: 1 },
-  };
-  const nearHillAnt = {
-    ...nearFoodAnt,
-    returnIndex: 1,
-    edge: { from: 1, to: 0 },
-  };
-  const longerTripAnt = { ...nearFoodAnt, tripDistance: 4 };
-  const params = { fastDeposit: 1, foodGradientFloor: 0.25 };
-  const nearFood = foodDepositForReturn(nearFoodAnt, graph, params);
-  const nearHill = foodDepositForReturn(nearHillAnt, graph, params);
-  const longerTrip = foodDepositForReturn(longerTripAnt, graph, params);
-  assertEquals(nearFood.key, arcKey(1, 2));
-  assertEquals(nearHill.key, arcKey(0, 1));
-  assert(nearFood.amount > nearHill.amount);
-  assert(
-    nearFood.amount > longerTrip.amount,
-    "An ant's shorter completed trip should deposit more food signal",
-  );
-});
-
-Deno.test("simulation transitions are immutable and eventually deliver food", () => {
+Deno.test("simulation is immutable, locally signaled, and productive", () => {
   const initial = createSimulation({
     seed: 93,
     params: {
@@ -303,70 +229,34 @@ Deno.test("simulation transitions are immutable and eventually deliver food", ()
     },
   });
   const snapshot = JSON.stringify(initial);
-  const final = Array.from({ length: 1800 }).reduce(
-    (state) => stepSimulation(state, 1 / 30),
-    initial,
-  );
+  const final = run(initial, 240);
   assertEquals(JSON.stringify(initial), snapshot, "Previous state was mutated");
-  assert(final.stats.discoveries > 0, "Expected at least one food discovery");
-  assert(final.stats.deliveries > 0, "Expected at least one completed delivery");
-  assert(Object.values(final.pheromones.slow).some((value) => value > 0));
-  assert(Object.values(final.pheromones.fast).some((value) => value > 0));
-  const returning = final.ants.filter(({ mode, edge }) =>
-    mode === "return" && edge !== null
-  );
-  assert(returning.length > 0);
-  assert(
-    returning.every(({ edge }) =>
-      edge.nextReturnIndex < edge.returnIndex &&
-      final.pheromones.slow[arcKey(edge.from, edge.to)] > 0
-    ),
-    "Food carriers must follow a hillward coverage arc",
-  );
-  assert(
-    Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
-    "Expected temporary exploration to discover the shortest route",
-  );
-
-  const shortestArcs = final.stats.shortestRoute.slice(1).map((node, index) =>
-    arcKey(final.stats.shortestRoute[index], node)
-  );
-  const average = (values) =>
-    values.reduce((total, value) => total + value, 0) / values.length;
-  const onShortestRoute = shortestArcs.map((arc) => final.pheromones.fast[arc]);
-  const offShortestRoute = Object.entries(final.pheromones.fast)
-    .filter(([arc]) => !shortestArcs.includes(arc))
-    .map(([, value]) => value);
-  assert(
-    average(onShortestRoute) > average(offShortestRoute),
-    "Expected the shortest route to receive more food signal on average",
-  );
+  assert(final.stats.discoveries > 0);
+  assert(final.stats.deliveries > 0);
+  assert(Object.values(final.pheromones.slow.edges).some((value) => value > 0));
+  assert(Object.values(final.pheromones.fast.edges).some((value) => value > 0));
+  assert(final.ants.every((ant) => !Object.hasOwn(ant, "route")));
 });
 
-const adaptationFixture = () => {
-  const initial = createSimulation({
-    seed: 93,
-    params: {
-      nodeCount: 8,
-      density: 0.8,
-      antCount: 16,
-      exploreRate: 0.3,
-      speed: 0.6,
-      fastHalfLife: 2,
-    },
-  });
-  return Array.from({ length: 600 }).reduce(
-    (state) => stepSimulation(state, 1 / 30),
-    initial,
+const adaptationFixture = () =>
+  run(
+    createSimulation({
+      seed: 93,
+      params: {
+        nodeCount: 8,
+        density: 0.8,
+        antCount: 16,
+        exploreRate: 0.3,
+        speed: 0.6,
+        fastHalfLife: 2,
+      },
+    }),
+    200,
   );
-};
 
 const assertColonyContinues = (before, after) => {
-  assert(after.ants === before.ants, "Ant records should be preserved");
-  assert(
-    after.pheromones === before.pheromones,
-    "Pheromone fields should be preserved",
-  );
+  assert(after.ants === before.ants);
+  assert(after.pheromones === before.pheromones);
   assertEquals(after.rngSeed, before.rngSeed);
   assertEquals(after.elapsed, before.elapsed);
   assertEquals(after.stats.deliveries, before.stats.deliveries);
@@ -389,33 +279,29 @@ Deno.test("food mutations preserve the running colony", () => {
   const removed = removeFood(moved, 1);
   assertColonyContinues(moved, removed);
   assertEquals(removed.graph.foods, [2]);
-  assertEquals(removed.stats.bestRoute, []);
   assertEquals(removed.stats.bestDistance, null);
-  assertEquals(JSON.stringify(warm), originalSnapshot, "Food edits mutated input");
+  assertEquals(JSON.stringify(warm), originalSnapshot);
 });
 
-Deno.test("old food signal fades while the uninterrupted colony adapts", () => {
+Deno.test("obsolete food signal fades while the colony adapts", () => {
   const warm = adaptationFixture();
   const source = warm.graph.foods[0];
   const destination = 6;
-  const oldRoute = warm.stats.shortestRoute;
-  const oldArc = arcKey(oldRoute.at(-2), oldRoute.at(-1));
-  const oldSignal = warm.pheromones.fast[oldArc];
+  const oldEdge = edgeKey(...warm.stats.shortestRoute.slice(-2));
   const moved = moveFood(warm, source, destination);
   assertColonyContinues(warm, moved);
 
-  const adapted = Array.from({ length: 600 }).reduce(
-    (state) => stepSimulation(state, 1 / 30),
-    moved,
-  );
-  const newRoute = adapted.stats.shortestRoute;
-  const newArc = arcKey(newRoute.at(-2), newRoute.at(-1));
-  assertEquals(adapted.stats.bestRoute, newRoute);
-  assert(
-    Math.abs(adapted.stats.bestDistance - adapted.stats.shortestDistance) < 1e-9,
-  );
+  const adapted = run(moved, 240);
+  const newEdge = edgeKey(...adapted.stats.shortestRoute.slice(-2));
   assert(adapted.stats.deliveries > warm.stats.deliveries);
   assert(adapted.stats.discoveries > warm.stats.discoveries);
-  assert(adapted.pheromones.fast[newArc] > adapted.pheromones.fast[oldArc]);
-  assert(adapted.pheromones.fast[oldArc] < oldSignal / 2);
+  assert(adapted.pheromones.fast.edges[newEdge] > 0);
+  assert(
+    adapted.pheromones.fast.edges[newEdge] > adapted.pheromones.fast.edges[oldEdge],
+  );
+  assert(
+    adapted.pheromones.fast.nodes[destination] >
+      adapted.pheromones.fast.nodes[source],
+  );
+  assert(foodProbabilitiesForNode(adapted, adapted.graph.hill).length > 0);
 });

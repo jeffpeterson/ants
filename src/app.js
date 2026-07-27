@@ -1,9 +1,9 @@
 import {
   addFood,
-  arcKey,
   clearPheromones,
   createSimulation,
   deriveMetrics,
+  dominantFoodRoute,
   foodProbabilitiesForNode,
   moveFood,
   removeFood,
@@ -172,10 +172,10 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "The whole colony is exploring and laying hillward breadcrumbs.";
+    return "The whole colony is exploring and extending the persistent gradient.";
   }
   if (metrics.deliveries === 0) {
-    return "Food found. Returning ants are laying a directed signal.";
+    return "Food found. Returning ants are extending the food gradient.";
   }
   return `${metrics.deliveries} deliveries · ${
     formatPercent(metrics.efficiency)
@@ -319,32 +319,19 @@ const drawBaseEdges = (simulation, points) => {
 
 const routePairs = (route) => route.slice(1).map((node, index) => [route[index], node]);
 
-const drawBestRoute = (simulation, points) => {
-  if (simulation.stats.bestRoute.length < 2) return;
+const drawLeadingRoute = (simulation, points) => {
+  const leading = dominantFoodRoute(simulation);
+  if (leading === null) return;
   context.save();
   context.strokeStyle = "#087f8c";
   context.globalAlpha = 0.09;
   context.lineWidth = 12;
   context.lineCap = "round";
-  routePairs(simulation.stats.bestRoute).forEach(([from, to]) =>
+  routePairs(leading.route).forEach(([from, to]) =>
     line(context, points[from], points[to])
   );
   context.restore();
 };
-
-const drawSlowPheromones = (simulation, points) =>
-  simulation.graph.edges.forEach((edge) => {
-    drawCoverageArc(
-      points[edge.a],
-      points[edge.b],
-      simulation.pheromones.slow[arcKey(edge.a, edge.b)],
-    );
-    drawCoverageArc(
-      points[edge.b],
-      points[edge.a],
-      simulation.pheromones.slow[arcKey(edge.b, edge.a)],
-    );
-  });
 
 const offsetArc = (from, to, amount = 3.2) => {
   const dx = to.x - from.x;
@@ -380,68 +367,86 @@ const drawArrow = (from, to, intensity, color) => {
   context.restore();
 };
 
-const drawCoverageArc = (from, to, amount) => {
+const drawPheromoneEdge = (
+  from,
+  to,
+  amount,
+  fromLevel,
+  toLevel,
+  {
+    color,
+    faint,
+    strong,
+    offset,
+    width,
+    dashed = false,
+    elapsed = 0,
+  },
+) => {
   const intensity = strength(amount);
   if (intensity < 0.008) return;
-  const [start, end] = offsetArc(from, to, 2.8);
+  const [start, end] = offsetArc(from, to, offset);
+  const [weaker, stronger] = fromLevel <= toLevel ? [start, end] : [end, start];
   const gradient = context.createLinearGradient(
-    start.x,
-    start.y,
-    end.x,
-    end.y,
+    weaker.x,
+    weaker.y,
+    stronger.x,
+    stronger.y,
   );
-  gradient.addColorStop(0, "rgba(197, 139, 42, 0.06)");
-  gradient.addColorStop(
-    1,
-    `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
-  );
+  gradient.addColorStop(0, faint);
+  gradient.addColorStop(1, strong(intensity));
   context.save();
   context.strokeStyle = gradient;
-  context.lineWidth = 1 + intensity * 5.2;
+  context.lineWidth = width(intensity);
   context.lineCap = "round";
+  if (dashed) {
+    context.setLineDash([7, 8]);
+    context.lineDashOffset = -elapsed * 18;
+  }
   line(context, start, end);
   context.restore();
-  drawArrow(start, end, intensity, "#c58b2a");
+  if (Math.abs(toLevel - fromLevel) > 1e-6) {
+    drawArrow(weaker, stronger, intensity, color);
+  }
 };
 
-const drawFastArc = (from, to, amount, elapsed) => {
-  const intensity = strength(amount);
-  if (intensity < 0.008) return;
-  const [start, end] = offsetArc(from, to);
-  const gradient = context.createLinearGradient(
-    start.x,
-    start.y,
-    end.x,
-    end.y,
+const drawSlowPheromones = (simulation, points) =>
+  simulation.graph.edges.forEach((edge) =>
+    drawPheromoneEdge(
+      points[edge.a],
+      points[edge.b],
+      simulation.pheromones.slow.edges[edge.id],
+      simulation.pheromones.slow.nodes[edge.a],
+      simulation.pheromones.slow.nodes[edge.b],
+      {
+        color: "#c58b2a",
+        faint: "rgba(197, 139, 42, 0.06)",
+        strong: (intensity) => `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
+        offset: 2.8,
+        width: (intensity) => 1 + intensity * 5.2,
+      },
+    )
   );
-  gradient.addColorStop(0, "rgba(8, 127, 140, 0.08)");
-  gradient.addColorStop(1, `rgba(8, 127, 140, ${0.35 + intensity * 0.6})`);
-  context.save();
-  context.strokeStyle = gradient;
-  context.lineWidth = 1.2 + intensity * 4.6;
-  context.lineCap = "round";
-  context.setLineDash([7, 8]);
-  context.lineDashOffset = -elapsed * 18;
-  line(context, start, end);
-  context.restore();
-  drawArrow(start, end, intensity, "#087f8c");
-};
 
 const drawFastPheromones = (simulation, points) =>
-  simulation.graph.edges.forEach((edge) => {
-    drawFastArc(
+  simulation.graph.edges.forEach((edge) =>
+    drawPheromoneEdge(
       points[edge.a],
       points[edge.b],
-      simulation.pheromones.fast[arcKey(edge.a, edge.b)],
-      simulation.elapsed,
-    );
-    drawFastArc(
-      points[edge.b],
-      points[edge.a],
-      simulation.pheromones.fast[arcKey(edge.b, edge.a)],
-      simulation.elapsed,
-    );
-  });
+      simulation.pheromones.fast.edges[edge.id],
+      simulation.pheromones.fast.nodes[edge.a],
+      simulation.pheromones.fast.nodes[edge.b],
+      {
+        color: "#087f8c",
+        faint: "rgba(8, 127, 140, 0.08)",
+        strong: (intensity) => `rgba(8, 127, 140, ${0.35 + intensity * 0.6})`,
+        offset: -3.2,
+        width: (intensity) => 1.2 + intensity * 4.6,
+        dashed: true,
+        elapsed: simulation.elapsed,
+      },
+    )
+  );
 
 const drawHill = (point) => {
   context.save();
@@ -555,7 +560,7 @@ const drawAnt = (ant, points) => {
   const target = ant.edge ? points[ant.edge.to] : point;
   const angle = Math.atan2(target.y - point.y, target.x - point.x);
   const exploring = ant.mode === "search" &&
-    (["explore", "probe"].includes(ant.searchState.kind) ||
+    (["discover", "probe"].includes(ant.searchState.kind) ||
       ant.edge?.exploring === true);
   context.save();
   context.translate(point.x, point.y);
@@ -583,7 +588,7 @@ const drawCanvas = (current) => {
   const points = Object.fromEntries(
     current.simulation.graph.nodes.map((node) => [node.id, project(node, size)]),
   );
-  drawBestRoute(current.simulation, points);
+  drawLeadingRoute(current.simulation, points);
   drawBaseEdges(current.simulation, points);
   if (current.view.trails) {
     drawSlowPheromones(current.simulation, points);
@@ -630,7 +635,7 @@ const sliderConfigs = [
   ["speed", (value) => Number(value) / 100, (value) => `${Number(value) / 100} u/s`],
   ["slowHalfLife", Number, (value) => `${value} s`],
   ["fastHalfLife", Number, (value) => `${value} s`],
-  ["slowAvoidance", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
+  ["slowInfluence", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
   ["fastInfluence", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
   ["nodeCount", Number, (value) => `${value}`],
   ["density", (value) => Number(value) / 100, (value) => `${value}%`],

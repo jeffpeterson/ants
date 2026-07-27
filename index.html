@@ -39,8 +39,8 @@
             <h2 id="stage-heading">Graph field</h2>
           </div>
           <div class="legend" aria-label="Visualization legend">
-            <span><i class="legend-slow"></i>Coverage → hill</span>
-            <span><i class="legend-fast"></i>Food → food</span>
+            <span><i class="legend-slow"></i>Persistent gradient</span>
+            <span><i class="legend-fast"></i>Food gradient</span>
             <span><i class="legend-explore"></i>Trying another way</span>
           </div>
         </div>
@@ -61,7 +61,7 @@
 
         <div class="stage-footer">
           <p id="stage-status">
-            The whole colony is exploring and laying hillward breadcrumbs.
+            The whole colony is exploring and extending the persistent gradient.
           </p>
           <dl>
             <div>
@@ -122,7 +122,7 @@
             <div>
               <dt>Signal focus</dt>
               <dd id="signal-focus">0%</dd>
-              <small>dominant food arcs</small>
+              <small>dominant food edges</small>
             </div>
           </dl>
         </section>
@@ -138,8 +138,8 @@
               <input id="antCount" type="range" min="8" max="120" value="64">
             </label>
             <label class="slider-row" for="exploreRate">
-              <span>Explore chance <output id="exploreRate-value">10%</output></span>
-              <input id="exploreRate" type="range" min="0" max="30" value="10">
+              <span>Explore chance <output id="exploreRate-value">5%</output></span>
+              <input id="exploreRate" type="range" min="0" max="30" value="5">
             </label>
             <label class="slider-row" for="speed">
               <span>Ant speed <output id="speed-value">0.17 u/s</output></span>
@@ -154,12 +154,12 @@
           </div>
           <div class="slider-list">
             <label class="slider-row" for="slowHalfLife">
-              <span>Coverage half-life <output id="slowHalfLife-value">42 s</output></span>
+              <span>Persistent half-life <output id="slowHalfLife-value">42 s</output></span>
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
             </label>
-            <label class="slider-row" for="slowAvoidance">
-              <span>Coverage avoidance <output id="slowAvoidance-value">0.5×</output></span>
-              <input id="slowAvoidance" type="range" min="0" max="80" value="5">
+            <label class="slider-row" for="slowInfluence">
+              <span>Familiar trail pull <output id="slowInfluence-value">0.5×</output></span>
+              <input id="slowInfluence" type="range" min="0" max="80" value="5">
             </label>
             <label class="slider-row" for="fastHalfLife">
               <span>Food half-life <output id="fastHalfLife-value">9 s</output></span>
@@ -225,7 +225,7 @@
             <ol id="probabilities" class="probabilities"></ol>
             <p id="probability-empty" class="muted">
               No usable food signal here. A searching ant explores; a carrier
-              follows its breadcrumbs home.
+              follows the local hill gradient.
             </p>
           </div>
         </section>
@@ -240,22 +240,21 @@
           </summary>
           <div>
             <p>
-              Exploring ants mark the reverse arc of each crossing, creating a
-              local breadcrumb field toward the hill. Before food is known,
-              every ant immediately starts a finite discovery tour on
-              less-covered, unvisited local edges.
-              A carrier follows adjacent hillward coverage along its own
-              loop-free breadcrumbs and lays food signal on the opposite arc.
+              Each field stores an undirected amount on an edge and a scalar
+              concentration at each endpoint. Ants never deposit an arrow; the
+              visible arrow is derived from the weaker endpoint toward the
+              stronger one. Every ant initially explores, extending a
+              persistent concentration gradient away from the hill.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
-              On later trips every ant normally samples the foodward
-              distribution linearly, but can occasionally try one less-covered
-              edge and re-evaluate at the next node. There is no permanent scout
-              caste. A returning ant scales its deposit by the length of its own
-              completed trip; equal-speed ants also finish more short trips per
-              minute. Add or move food and the old signal will fade while the
-              uninterrupted colony adapts.
+              The first carrier climbs the persistent hill gradient while
+              extending a short-lived gradient from food. Later outbound ants
+              climb that food gradient and carriers descend the same field back
+              to the hill. A temporary novelty choice can try a less-covered
+              edge; there is no scout caste or remembered route. Equal-speed
+              ants renew short routes more often. Add or move food and the old
+              field fades while the uninterrupted colony adapts.
             </p>
           </div>
         </details>
@@ -264,7 +263,7 @@
 
     <footer>
       <p>PURE CORE / SEEDED RANDOMNESS / LOCAL DECISIONS</p>
-      <p>FORMIC LAB · <span>coverage → hill / food signal → food</span></p>
+      <p>FORMIC LAB · <span>scalar trails / locally derived gradients</span></p>
     </footer>
 
     <script type="module" src="./src/app.js"></script>
