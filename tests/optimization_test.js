@@ -10,6 +10,7 @@ import {
   EVALUATION_HORIZONS,
   HYPOTHESIS_PARAMS,
   latinHypercube,
+  measureThroughput,
   PARAMETER_SPECS,
   refineCandidates,
 } from "../src/optimization.js";
@@ -153,6 +154,25 @@ Deno.test("scenario evaluation is deterministic, immutable, and finite", () => {
   assertEquals(first, second);
   assertEquals(JSON.stringify(candidate), snapshot);
   assert(Object.values(first.metrics).every(Number.isFinite));
+});
+
+Deno.test("finite throughput windows allow cycles already in flight", () => {
+  const cycles = Array.from({ length: 11 }, (_, index) => ({
+    food: 3,
+    deliveredAt: index,
+  }));
+  const measured = measureThroughput(
+    cycles,
+    3,
+    0,
+    10,
+    { antCount: 10, speed: 0.2 },
+    1,
+  );
+
+  assertEquals(measured.value, 1);
+  assertEquals(measured.raw, 1.1);
+  assertEquals(measured.maximum, 2);
 });
 
 const scoredFixture = (value, failures = {}) => ({

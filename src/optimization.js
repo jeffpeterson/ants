@@ -500,13 +500,27 @@ const completedWithin = (cycles, food, start, end) =>
     cycle.deliveredAt <= end
   );
 
-const throughput = (cycles, food, start, end, resources, distance) => {
+export const measureThroughput = (
+  cycles,
+  food,
+  start,
+  end,
+  resources,
+  distance,
+) => {
   const seconds = end - start;
   const upperBound = resources.antCount * resources.speed / (2 * distance);
   const raw = seconds <= 0
     ? 0
     : completedWithin(cycles, food, start, end).length / seconds / upperBound;
-  return { value: clamp(0, 1, raw), raw };
+  const boundaryAllowance = seconds <= 0
+    ? 0
+    : resources.antCount / seconds / upperBound;
+  return {
+    value: clamp(0, 1, raw),
+    raw,
+    maximum: 1 + boundaryAllowance,
+  };
 };
 
 const cycleEfficiency = (cycles, distance) => {
@@ -571,7 +585,7 @@ export const evaluateScenario = (
     steadyStart,
     staticEnd,
   );
-  const staticThroughput = throughput(
+  const staticThroughput = measureThroughput(
     completed.cycles,
     oldFood,
     steadyStart,
@@ -604,7 +618,7 @@ export const evaluateScenario = (
       adaptationEnd,
       start + horizons.binUnits * newUnit,
     );
-    return throughput(
+    return measureThroughput(
       adapted.cycles,
       destination,
       start,
@@ -613,7 +627,7 @@ export const evaluateScenario = (
       newDistance,
     ).value;
   });
-  const preThroughput = throughput(
+  const preThroughput = measureThroughput(
     warm.cycles,
     oldFood,
     horizons.preStartUnits * oldUnit,
@@ -621,7 +635,7 @@ export const evaluateScenario = (
     resources,
     oldDistance,
   );
-  const lateThroughput = throughput(
+  const lateThroughput = measureThroughput(
     adapted.cycles,
     destination,
     adaptationEnd - horizons.lateAdaptationUnits * newUnit,
@@ -665,8 +679,10 @@ export const evaluateScenario = (
   };
   const finite = Object.values(metrics).every(Number.isFinite);
   const invalid = completed.invalid || adapted.invalid || !finite ||
-    staticThroughput.raw > 1.001 || preThroughput.raw > 1.001 ||
-    lateThroughput.raw > 1.001 || efficiency.maximum > 1.001;
+    staticThroughput.raw > staticThroughput.maximum + 0.001 ||
+    preThroughput.raw > preThroughput.maximum + 0.001 ||
+    lateThroughput.raw > lateThroughput.maximum + 0.001 ||
+    efficiency.maximum > 1.001;
 
   return {
     id: scenarioValue.id,
