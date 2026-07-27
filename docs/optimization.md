@@ -130,3 +130,30 @@ bounded, discontinuous controls without the extra assumptions of a covariance mo
 The current defaults and the point prediction above are always included. The optimizer
 may emit a suggested preset but must never rewrite defaults automatically. A candidate
 is promoted only after the held-out and `1/60 s` validation results are recorded here.
+
+## Run the evaluator
+
+Compare the defaults and preregistered point prediction on the six screening maps:
+
+```sh
+deno task evaluate
+```
+
+Select another suite or retain every per-scenario observation:
+
+```sh
+deno task evaluate -- --suite=validation --candidate=defaults --full
+```
+
+Run the deterministic Latin-hypercube search, elite refinement, full training pass, and
+held-out validation:
+
+```sh
+deno task optimize -- --out=.runs/colony-search.json
+```
+
+Useful controls include `--samples`, `--rounds`, `--elite`, `--per-elite`,
+`--finalists`, `--validate`, `--search-seed`, and `--dt`. Progress goes to stderr and
+the versioned report goes to stdout as JSON. Graph seeds and colony random seeds are
+separate, every candidate sees the same scenarios, and `antCount` and `speed` remain
+fixed evaluation resources.

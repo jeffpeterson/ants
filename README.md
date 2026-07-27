@@ -17,6 +17,13 @@ Open <http://localhost:4173>. Run the tests with:
 deno task test
 ```
 
+Run the reproducible colony scorecard or parameter optimizer with:
+
+```sh
+deno task evaluate
+deno task optimize -- --out=.runs/colony-search.json
+```
+
 ## Algorithm
 
 The generator blends an even low-discrepancy layout toward increasingly loose, clustered

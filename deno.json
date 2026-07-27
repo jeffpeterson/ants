@@ -1,6 +1,8 @@
 {
   "tasks": {
     "dev": "deno run --allow-read --allow-net dev.ts",
+    "evaluate": "deno run tools/evaluate.js",
+    "optimize": "deno run --allow-write=. tools/optimize.js",
     "test": "deno test --allow-read=."
   },
   "fmt": {
