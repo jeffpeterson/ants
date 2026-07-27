@@ -136,12 +136,120 @@ The current defaults and the point prediction above are always included. The opt
 may emit a suggested preset but must never rewrite defaults automatically. A candidate
 is promoted only after the held-out and `1/60 s` validation results are recorded here.
 
+## Results and promotion
+
+The first Latin-hypercube search and two refinement rounds completed on 2026-07-27. The
+search used 48 initial samples, six elites, three perturbations per elite, and separate
+graph and colony seeds. Four finalists from each food-storage model reached the 24-map
+validation pass.
+
+At the search time step (`dt = 0.25 s`), the leading exact node and edge candidates were
+close overall but had different strengths:
+
+| Validation result | Node winner | Edge winner |
+| ----------------- | ----------: | ----------: |
+| Total score       |       32.42 |       31.57 |
+| Discovery `D`     |       0.817 |       0.775 |
+| Throughput `Q`    |       0.232 |       0.228 |
+| Efficiency `E`    |       0.381 |       0.409 |
+| Homing `H`        |       0.912 |       0.925 |
+| Adaptation `A`    |       0.240 |       0.296 |
+| Stranded maps     |        2/24 |        3/24 |
+
+Edge storage improved route efficiency and adaptation, especially on small, dense, or
+low-variation maps. Node storage was more reliable on large, sparse, and highly varied
+maps. Because the total difference is small and both models dropped from training to
+validation, this table is selection evidence rather than a claim of universal
+superiority.
+
+The exact node winner was rounded only to precision reproducible by the playground
+controls. The rounded configuration was then compared with the previous defaults and the
+rounded edge candidate at the browser's `1/60 s` step:
+
+| Browser-cadence validation | Legacy | Balanced node | Adaptive edge |
+| -------------------------- | -----: | ------------: | ------------: |
+| Total score                |  10.88 |         36.20 |         28.34 |
+| Discovery `D`              |  0.591 |         0.847 |         0.719 |
+| Throughput `Q`             |  0.172 |         0.216 |         0.217 |
+| Efficiency `E`             |  0.304 |         0.363 |         0.384 |
+| Homing `H`                 |  0.620 |         0.912 |         0.893 |
+| Adaptation `A`             |  0.178 |         0.291 |         0.316 |
+| Stranded maps              |   7/24 |          1/24 |          4/24 |
+| No-delivery maps           |   1/24 |          0/24 |          0/24 |
+| No-adaptation maps         |   2/24 |          0/24 |          0/24 |
+
+The independent four-map boundary suite reinforced the choice. Balanced node scored
+`41.43` with no failures. Adaptive edge scored `10.08`, with one no-adaptation map and
+one stranded map. These are deliberately harsh endpoints: 8 to 1,200 nodes, minimum to
+maximum connection density, and minimum to maximum variation. The final browser and
+stress reports use evaluation version 2, which permits the physically valid boundary
+inventory of ants already mid-cycle when a finite throughput window opens.
+
+Two final local refinements were rejected:
+
+- Raising short-edge bias from `0.41` to `0.50` made 10 rather than 9 of the original 12
+  demo seeds show a leading trail within 25% of shortest, but browser score fell from
+  `36.20` to `32.70` and stress score fell from `41.43` to `38.78`.
+- A `25%` unmarked-branch floor was the best coarse floor ablation, but at browser
+  cadence it scored `30.16` versus `36.20` for zero and stranded on 3 rather than 1 of
+  24 maps. Its stress score was also lower (`39.80` versus `41.43`).
+
+The promoted balanced-node settings are therefore:
+
+| Lever                      | Default |
+| -------------------------- | ------: |
+| Enter scouting             |   0.007 |
+| Stop scouting              | 0.083/s |
+| Scout persistent bias      |   -1.10 |
+| Unmarked branch floor      |       0 |
+| U-turn weight              |   0.045 |
+| Straight-ahead bias        |    1.58 |
+| Short-edge bias            |    0.41 |
+| Outbound food pull         |    4.56 |
+| Outbound food polarity     |   +0.78 |
+| Homebound food pull        |    1.10 |
+| Homebound persistent pull  |    3.09 |
+| Homebound food polarity    |   -1.40 |
+| Homebound persistent slope |   +4.00 |
+| Persistent half-life       |  22.2 s |
+| Food half-life             |  14.4 s |
+| Food storage               |    node |
+
+Ant count (`64`) and speed (`0.17 u/s`) remain fixed resources, not optimized algorithm
+parameters. The playground includes three immutable built-ins: the promoted balanced
+node configuration, the adaptive edge candidate, and the pre-optimization baseline.
+Personal presets remain separate.
+
+### Hypothesis audit
+
+| Preregistered prediction                                    | Outcome                                                                                                                     |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Negative outbound food polarity                             | Contradicted for nodes: both node finalists selected a positive climb; edge polarity is inapplicable.                       |
+| Persistent avoidance helps exploration                      | Supported in sign: both model winners selected a negative scout bias, though its isolated effect was not measured.          |
+| Full unmarked-branch floor is the highest-impact correction | Contradicted: the edge winner selected zero, and the browser-cadence node ablation favored zero over 25%.                   |
+| Edge storage improves throughput and efficiency             | Partial: efficiency and adaptation improved, throughput was nearly tied, and sparse-map failures erased the aggregate gain. |
+| Slow/food half-lives near 70/8 seconds                      | Contradicted: the promoted values are 22.2/14.4 seconds.                                                                    |
+| Strong persistent homing is useful                          | Mixed: maximum positive persistent polarity survived, but node pull fell to 3.09 while edge pull rose to 9.48.              |
+| The robust winner will avoid extremes                       | Mixed: most values were interior, but homebound persistent polarity remained at its upper bound.                            |
+| Saturating deposits and one-junction exploration            | Untested; neither rule was needed for the first promoted result.                                                            |
+
+These verdicts distinguish causal ablations from parameter values merely selected
+together. The validation maps participated in finalist ranking, so future iterations
+should add fresh graph seeds and repeated colony seeds before making smaller claims
+about improvements over the promoted default.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:
 
 ```sh
 deno task evaluate
+```
+
+Evaluate one source-controlled playground preset:
+
+```sh
+deno task evaluate -- --preset=adaptive-edge --suite=validation
 ```
 
 Select another suite or retain every per-scenario observation:
