@@ -93,6 +93,31 @@ default:
 - The best robust configuration will be less extreme than per-map winners. In
   particular, maximum polarity and maximum signal pull are expected to overfit.
 
+### Structural hypotheses
+
+These are recorded separately because they change a decision rule rather than merely
+selecting slider values:
+
+1. **A positive follower choice floor will be the highest-impact correction.** The
+   current chooser removes every unmarked neighbor before applying `baseWeight`, so the
+   documented base term cannot give an ordinary follower a small chance to correct onto
+   a new branch. Keeping every adjacent branch eligible should improve relocation and
+   error correction while preserving proportional, local choice.
+2. **Locally saturating food deposits may improve adaptation.** Reducing each new
+   deposit as the local node level rises should limit lock-in without consulting a
+   route, shortest path, or global maximum.
+3. **One-junction exploration may improve steady throughput but hurt initial
+   discovery.** It will be evaluated as a countermodel, not assumed superior: the
+   playground deliberately permits multi-edge random walks after an ant enters scouting.
+4. **Edge food pheromone would probably improve route identification, but is excluded
+   from this optimization.** Classical ant-colony optimization commonly stores pheromone
+   per edge, while this playground intentionally stores scalar node fields and derives
+   visible edge polarity from endpoint levels. Changing that invariant requires an
+   explicit product decision, not an optimizer side effect.
+5. **Trip-quality reinforcement is also excluded.** Scaling deposits by a completed
+   route's length would give strong artificial-ACO feedback, but requires personal
+   odometry or route memory beyond the local pheromone-only decision model.
+
 ## Search protocol
 
 The first search will use seeded Latin hypercube sampling over behavioral controls,
