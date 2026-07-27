@@ -67,6 +67,7 @@ default:
 | Enter scouting                 |    0.02 |           0.03 | A small continuing exploration budget should repair stale routes without dissolving recruitment.           |
 | Stop scouting                  |  0.12/s |         0.16/s | Multi-edge random walks should last long enough to leave a branch but usually rejoin a discovered trail.   |
 | Persistent bias while scouting |       0 |           -1.2 | Mild avoidance should spread search traffic into less-covered branches.                                    |
+| Unmarked branch floor          |      0% |           100% | The base term is already small; enabling it fully should permit rare correction without swamping a trail.  |
 | U-turn weight                  |    0.18 |           0.15 | Immediate reversals waste distance, but a nonzero escape probability prevents trapping.                    |
 | Straight-ahead bias            |     1.6 |            1.2 | Local geometry is useful, but a strong heading preference can skip a good side branch.                     |
 | Short-edge bias                |     1.0 |            1.3 | Short edges should increase lap frequency and favor shorter routes without becoming deterministic.         |
@@ -102,7 +103,8 @@ selecting slider values:
    current chooser removes every unmarked neighbor before applying `baseWeight`, so the
    documented base term cannot give an ordinary follower a small chance to correct onto
    a new branch. Keeping every adjacent branch eligible should improve relocation and
-   error correction while preserving proportional, local choice.
+   error correction while preserving proportional, local choice. Because the existing
+   base term is only `0.06`, the point prediction is a `100%` floor multiplier.
 2. **Locally saturating food deposits may improve adaptation.** Reducing each new
    deposit as the local node level rises should limit lock-in without consulting a
    route, shortest path, or global maximum.
@@ -115,7 +117,10 @@ selecting slider values:
    while putting the food trail on undirected edges. An ant would still read only its
    incident options, and the stored signal would contain no direction. This model must
    beat the node model on held-out effectiveness—not merely produce a cleaner-looking
-   trail—before replacing it.
+   trail—before replacing it. The predicted best structural combination is edge food
+   storage plus the fully enabled unmarked-branch floor; edge storage should primarily
+   improve throughput and cycle efficiency, while the floor should primarily improve
+   adaptation.
 5. **Trip-quality reinforcement is also excluded.** Scaling deposits by a completed
    route's length would give strong artificial-ACO feedback, but requires personal
    odometry or route memory beyond the local pheromone-only decision model.
