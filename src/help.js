@@ -35,6 +35,8 @@ export const CONTROL_HELP = Object.freeze({
     "Scout response to the persistent home-field slope: negative moves away from home, zero ignores the slope, and positive moves homeward.",
   unchartedPreference:
     "Reduce the weight of walked edges when a locally unwalked edge is available. At 100%, scouts choose only among unwalked options.",
+  trailJoinChance:
+    "Chance that a scout encountering usable local food pheromone leaves scouting and follows the signaled branch.",
   reversePenalty:
     "Weight for immediately reversing onto the previous node. Lower values discourage one-edge backtracking.",
   headingInfluence:

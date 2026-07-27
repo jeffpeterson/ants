@@ -38,6 +38,14 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
     BUILT_IN_ALGORITHM_PRESETS[0].params,
     selectParameters(DEFAULTS, ALGORITHM_KEYS),
   );
+  const joinChance = (id) =>
+    BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
+      ?.params.trailJoinChance;
+  assertEquals(joinChance("balanced-node"), 0.06);
+  assertEquals(joinChance("persistent-scouting"), 0);
+  assertEquals(joinChance("steady-food"), 0.07);
+  assertEquals(joinChance("adaptive-edge"), 0);
+  assertEquals(joinChance("legacy"), 0);
 });
 
 Deno.test("preset references preserve provenance and names containing colons", () => {
@@ -118,6 +126,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     stopExploreChance: 100,
     exploreSignalBias: 10,
     unchartedPreference: 100,
+    trailJoinChance: 100,
     choiceFloor: 100,
     reversePenalty: 100,
     speed: 100,

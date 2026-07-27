@@ -627,6 +627,61 @@ Deno.test("choosing an unwalked edge arms the scout frontier", () => {
   });
 });
 
+Deno.test("scouts can rejoin a locally usable food trail", () => {
+  const resultFor = (trailJoinChance) => {
+    const initial = createSimulation({
+      seed: 43,
+      params: {
+        antCount: 8,
+        choiceFloor: 0,
+        exploreRate: 0,
+        fastInfluence: 10,
+        headingInfluence: 0,
+        outboundPolarity: 0,
+        trailJoinChance,
+      },
+    });
+    const node = initial.graph.nodes.find(({ id }) =>
+      id !== initial.graph.hill &&
+      !initial.graph.foods.includes(id) &&
+      initial.graph.adjacency[id].length > 1
+    ).id;
+    const target = initial.graph.adjacency[node][0];
+    const ant = {
+      ...initial.ants[0],
+      node,
+      launchDelay: 0,
+      searchState: { kind: "explore", frontierArmed: true },
+    };
+    return {
+      target,
+      ant: stepSimulation({
+        ...initial,
+        pheromones: {
+          ...initial.pheromones,
+          fast: { ...initial.pheromones.fast, [target]: 1 },
+          fastEdges: {
+            ...initial.pheromones.fastEdges,
+            [edgeKey(node, target)]: 1,
+          },
+          slowEdges: Object.fromEntries(
+            initial.graph.edges.map(({ id }) => [id, 1]),
+          ),
+        },
+        ants: [ant],
+      }, 0.001).ants[0],
+    };
+  };
+
+  const ignoring = resultFor(0).ant;
+  assertEquals(ignoring.searchState.kind, "explore");
+  assertEquals(ignoring.searchState.frontierArmed, true);
+
+  const joining = resultFor(1);
+  assertEquals(joining.ant.searchState, { kind: "follow" });
+  assertEquals(joining.ant.edge.to, joining.target);
+});
+
 Deno.test("escape ends and resets only at home", () => {
   const initial = createSimulation({
     seed: 31,
@@ -1029,6 +1084,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "stopExploreChance",
     "exploreSignalBias",
     "unchartedPreference",
+    "trailJoinChance",
     "reversePenalty",
     "headingInfluence",
     "distanceInfluence",

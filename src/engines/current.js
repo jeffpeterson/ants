@@ -17,6 +17,7 @@ export const DEFAULTS = Object.freeze({
   homewardPreference: 1,
   exploreSignalBias: -2,
   unchartedPreference: 0.75,
+  trailJoinChance: 0.06,
   choiceFloor: 0,
   foodTrailModel: "node",
   headingInfluence: 1.58,
@@ -76,6 +77,11 @@ export const sanitizeParams = (values = {}) => ({
     0,
     1,
     finiteOr(DEFAULTS.unchartedPreference, values.unchartedPreference),
+  ),
+  trailJoinChance: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.trailJoinChance, values.trailJoinChance),
   ),
   choiceFloor: clamp(
     0,
@@ -877,8 +883,11 @@ const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   const [exploreDraw, choiceSeed] = nextRandom(seed);
   const hasFoodward = foodward.length > 0;
   const continuing = ant.searchState.kind === "explore";
+  const joining = continuing &&
+    hasFoodward &&
+    exploreDraw < params.trailJoinChance;
   const starting = !continuing && (!hasFoodward || exploreDraw < params.exploreRate);
-  const exploring = continuing || starting;
+  const exploring = continuing ? !joining : starting;
   const probabilities = exploring
     ? choiceProbabilities(
       ant.node,

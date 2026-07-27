@@ -369,6 +369,41 @@ as a support mask: endpoint levels still derive polarity, while only carrier-tra
 edges expose or display the signal. An untouched side branch cannot acquire food
 attraction merely because it shares a junction with the return path.
 
+### Local trail recruitment
+
+Hypothesis 6 predicted that temporary scouts should be able to stop random walking when
+they encounter usable food pheromone, but that unconditional joining would impede
+relocation. The new junction-local probability uses the same food choices already
+available to the ant. It adds no route memory, caste, destination knowledge, or
+additional field.
+
+The corrected food-locality engine was evaluated on 24 validation scenarios. All rows
+retained perfect pickup, initial-delivery, homing, stranded, and invalid-run rates. `6%`
+produced the best aggregate result without a relocation failure:
+
+| Join chance | Score | Throughput | Efficiency | Adaptation | No relocated delivery |
+| ----------: | ----: | ---------: | ---------: | ---------: | --------------------: |
+|          0% | 58.64 |      0.367 |      0.746 |      0.459 |                    0% |
+|        2.5% | 65.94 |      0.471 |      0.798 |      0.542 |                    0% |
+|          5% | 67.89 |      0.532 |      0.817 |      0.530 |                    0% |
+|          6% | 69.03 |      0.547 |      0.817 |      0.550 |                    0% |
+|          7% | 68.81 |      0.558 |      0.829 |      0.526 |                    0% |
+|         10% | 59.87 |      0.566 |      0.829 |      0.490 |                  4.2% |
+|         25% | 55.23 |      0.599 |      0.848 |      0.330 |                  4.2% |
+
+At browser cadence on six screening scenarios, `6%` scored `77.36` versus `70.10` for
+zero recruitment, while `7%` scored `77.42`. A fresh 24-map confirmation suite then
+scored `56.62`, `67.86`, and `64.98` for `0%`, `6%`, and `7%`, respectively, with no
+failures. The default therefore uses `6%`; `7%` remains the steady-food preset and `0%`
+remains the causal control. Reproduce a row with:
+
+```sh
+deno task evaluate -- \
+  --suite=confirmation \
+  --candidate=defaults \
+  --set=trailJoinChance=0.06
+```
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:

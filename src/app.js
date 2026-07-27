@@ -858,6 +858,12 @@ const sliderConfigs = [
     (value) => value * 100,
   ],
   [
+    "trailJoinChance",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
     "reversePenalty",
     (value) => Number(value) / 100,
     (value) => `${value}%`,

@@ -17,6 +17,7 @@ export const OPTIMIZED_KEYS = Object.freeze([
   "stopExploreChance",
   "exploreSignalBias",
   "unchartedPreference",
+  "trailJoinChance",
   "choiceFloor",
   "reversePenalty",
   "headingInfluence",
@@ -42,6 +43,7 @@ export const PARAMETER_SPECS = Object.freeze([
   { key: "stopExploreChance", min: 0.01, max: 0.95, scale: "log" },
   { key: "exploreSignalBias", min: -4, max: 4, scale: "linear" },
   { key: "unchartedPreference", min: 0, max: 1, scale: "linear" },
+  { key: "trailJoinChance", min: 0, max: 1, scale: "linear" },
   { key: "choiceFloor", min: 0, max: 1, scale: "power", power: 2 },
   { key: "reversePenalty", min: 0.01, max: 1, scale: "log" },
   { key: "headingInfluence", min: 0, max: 4, scale: "power", power: 2 },
@@ -61,6 +63,7 @@ export const HYPOTHESIS_PARAMS = Object.freeze({
   stopExploreChance: 0.16,
   exploreSignalBias: -1.2,
   unchartedPreference: 1,
+  trailJoinChance: 0.5,
   choiceFloor: 1,
   foodTrailModel: "node",
   reversePenalty: 0.15,
@@ -359,6 +362,20 @@ export const VALIDATION_SCENARIOS = Object.freeze(
       `validation-${String(item).padStart(2, "0")}`,
       (2_000_003 + index * 65_537) >>> 0,
       (3_000_017 + index * 32_771) >>> 0,
+      Math.round(16 + radicalInverse(item, 2) * 240),
+      0.1 + radicalInverse(item, 3) * 0.75,
+      radicalInverse(item, 5),
+    );
+  }),
+);
+
+export const CONFIRMATION_SCENARIOS = Object.freeze(
+  Array.from({ length: 24 }, (_, index) => {
+    const item = index + 25;
+    return scenario(
+      `confirmation-${String(index + 1).padStart(2, "0")}`,
+      (6_000_011 + index * 131_071) >>> 0,
+      (7_000_013 + index * 52_489) >>> 0,
       Math.round(16 + radicalInverse(item, 2) * 240),
       0.1 + radicalInverse(item, 3) * 0.75,
       radicalInverse(item, 5),

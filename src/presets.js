@@ -30,7 +30,23 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
   builtIn(
     "balanced-node",
     "Balanced node trails",
-    "Working scalar-trail default with unwalked-edge scouting and home-field homing.",
+    "Validated default: scouts sometimes join local food trails while retaining strong relocation adaptation.",
+  ),
+  builtIn(
+    "persistent-scouting",
+    "Persistent scouting",
+    "Control candidate: scouts ignore food trails until ordinary scouting ends.",
+    {
+      trailJoinChance: 0,
+    },
+  ),
+  builtIn(
+    "steady-food",
+    "Steady-food recruitment",
+    "Slightly faster stable-route traffic with a small relocation tradeoff.",
+    {
+      trailJoinChance: 0.07,
+    },
   ),
   builtIn(
     "adaptive-edge",
@@ -40,6 +56,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
       exploreRate: 0.018,
       stopExploreChance: 0.107,
       exploreSignalBias: -0.53,
+      trailJoinChance: 0,
       choiceFloor: 0,
       reversePenalty: 0.064,
       headingInfluence: 1.32,
@@ -64,6 +81,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
       stopExploreChance: 0.12,
       exploreSignalBias: 0,
       unchartedPreference: 0,
+      trailJoinChance: 0,
       choiceFloor: 0,
       reversePenalty: 0.18,
       headingInfluence: 1.6,

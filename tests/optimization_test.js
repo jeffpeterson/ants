@@ -3,6 +3,7 @@ import {
   aggregateEvaluation,
   anchorCandidates,
   assertOptimizationSchema,
+  CONFIRMATION_SCENARIOS,
   decodePoint,
   designCandidates,
   encodeParameters,
@@ -13,6 +14,7 @@ import {
   measureThroughput,
   PARAMETER_SPECS,
   refineCandidates,
+  VALIDATION_SCENARIOS,
 } from "../src/optimization.js";
 import { createSimulation } from "../src/colony.js";
 import { parseArgs, parseAssignments } from "../tools/args.js";
@@ -33,6 +35,20 @@ Deno.test("optimization schema covers every tuned playground parameter", () => {
     new Set(PARAMETER_SPECS.map(({ key }) => key)).size,
     PARAMETER_SPECS.length,
   );
+});
+
+Deno.test("confirmation scenarios are fresh, deterministic, and immutable", () => {
+  const validationSeeds = new Set(
+    VALIDATION_SCENARIOS.flatMap(({ seed, runSeed }) => [seed, runSeed]),
+  );
+  assertEquals(CONFIRMATION_SCENARIOS.length, 24);
+  assert(Object.isFrozen(CONFIRMATION_SCENARIOS));
+  CONFIRMATION_SCENARIOS.forEach((scenario) => {
+    assert(Object.isFrozen(scenario));
+    assert(Object.isFrozen(scenario.graph));
+    assert(!validationSeeds.has(scenario.seed));
+    assert(!validationSeeds.has(scenario.runSeed));
+  });
 });
 
 Deno.test("CLI options preserve assignments containing equals signs", () => {

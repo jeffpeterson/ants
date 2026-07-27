@@ -1,5 +1,6 @@
 import { DEFAULTS } from "../src/colony.js";
 import {
+  CONFIRMATION_SCENARIOS,
   evaluateCandidate,
   EVALUATION_VERSION,
   HYPOTHESIS_PARAMS,
@@ -14,6 +15,7 @@ import { parseArgs, parseAssignments } from "./args.js";
 const options = parseArgs(Deno.args);
 const overrides = parseAssignments(options.set);
 const suites = {
+  confirmation: CONFIRMATION_SCENARIOS,
   screening: SCREENING_SCENARIOS,
   training: TRAINING_SCENARIOS,
   validation: VALIDATION_SCENARIOS,
