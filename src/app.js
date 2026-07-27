@@ -382,6 +382,7 @@ const renderInspector = (current) => {
   const empty = byId("inspector-empty");
   const content = byId("inspector-content");
   const hasSelection = selectedNode !== null;
+  byId("node-inspector").classList.toggle("has-selection", hasSelection);
   empty.hidden = hasSelection;
   content.hidden = !hasSelection;
   if (!hasSelection) return;

@@ -370,7 +370,7 @@ h2 {
   padding: 16px;
 }
 
-.inspector {
+.inspector.has-selection {
   position: sticky;
   top: 12px;
   z-index: 5;
@@ -1005,7 +1005,7 @@ footer span {
     grid-template-columns: 1fr;
   }
 
-  .inspector {
+  .inspector.has-selection {
     position: static;
   }
 

@@ -5,6 +5,9 @@ ants a home, one or more food sources, and competing routes. Food can move while
 colony is running so obsolete signals visibly fade as the ants adapt. The simulation has
 a pure functional core and a small imperative canvas/DOM shell.
 
+The node inspector stays in normal sidebar flow until a node is selected, then remains
+in view while its controls are relevant.
+
 ## Run it
 
 ```sh

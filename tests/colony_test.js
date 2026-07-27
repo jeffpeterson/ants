@@ -1124,15 +1124,22 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   assert(css.includes(".signal-food input"));
 });
 
-Deno.test("the node inspector stays above the long control stack", async () => {
+Deno.test("a selected node keeps its inspector above the long control stack", async () => {
   const html = await Deno.readTextFile(new URL("../index.html", import.meta.url));
+  const app = await Deno.readTextFile(new URL("../src/app.js", import.meta.url));
   const css = await Deno.readTextFile(new URL("../styles.css", import.meta.url));
-  const inspector = html.indexOf('class="control-card inspector"');
+  const inspector = html.indexOf('id="node-inspector"');
 
   assert(inspector > html.indexOf('class="control-card transport"'));
   assert(inspector < html.indexOf("LIVE RESULTS"));
   assert(inspector < html.indexOf("PLAYGROUND"));
-  assert(/\.inspector\s*\{\s*position:\s*sticky;/u.test(css));
+  assert(
+    app.includes(
+      'byId("node-inspector").classList.toggle("has-selection", hasSelection)',
+    ),
+  );
+  assert(/\.inspector\.has-selection\s*\{\s*position:\s*sticky;/u.test(css));
+  assert(!/\.inspector\s*\{\s*position:\s*sticky;/u.test(css));
 });
 
 Deno.test("every interactive control has help text", async () => {
