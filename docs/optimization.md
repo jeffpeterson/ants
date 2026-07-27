@@ -145,6 +145,15 @@ Select another suite or retain every per-scenario observation:
 deno task evaluate -- --suite=validation --candidate=defaults --full
 ```
 
+Evaluate the winner from a saved optimizer report, including at browser fidelity:
+
+```sh
+deno task evaluate -- \
+  --input=.runs/colony-search.json \
+  --suite=validation \
+  --dt=0.016666666666666666
+```
+
 Run the deterministic Latin-hypercube search, elite refinement, full training pass, and
 held-out validation:
 

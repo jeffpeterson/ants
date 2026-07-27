@@ -34,7 +34,15 @@ const limit = Math.max(
   Math.min(suite.length, Number(options.limit ?? suite.length)),
 );
 const scenarios = suite.slice(0, limit);
-const candidates = options.candidate === "defaults"
+const imported = typeof options.input === "string" && options.input !== "true"
+  ? JSON.parse(await Deno.readTextFile(options.input))
+  : null;
+const candidates = imported !== null
+  ? [{
+    id: options.name ?? "imported",
+    params: imported.winner ?? imported.params ?? imported,
+  }]
+  : options.candidate === "defaults"
   ? [{ id: "defaults", params: DEFAULTS }]
   : options.candidate === "hypothesis"
   ? [{ id: "hypothesis", params: HYPOTHESIS_PARAMS }]
