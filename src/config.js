@@ -1,4 +1,4 @@
-import { CURRENT_ENGINE_ID } from "./colony.js";
+import { CURRENT_ENGINE_ID, getEngine } from "./colony.js";
 
 export const ALGORITHM_KEYS = Object.freeze([
   "antCount",
@@ -30,6 +30,13 @@ export const GRAPH_KEYS = Object.freeze([
 
 export const selectParameters = (params, keys) =>
   Object.fromEntries(keys.map((key) => [key, params[key]]));
+
+const omitParameters = (params, keys) => {
+  const omitted = new Set(keys);
+  return Object.fromEntries(
+    Object.entries(params).filter(([key]) => !omitted.has(key)),
+  );
+};
 
 const isRecord = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -64,7 +71,10 @@ export const migrateAlgorithmPresetLibrary = (value) =>
 
 export const algorithmPreset = (simulation) => ({
   engineId: simulation.engineId,
-  params: selectParameters(simulation.params, ALGORITHM_KEYS),
+  params: omitParameters(
+    simulation.params,
+    getEngine(simulation.engineId).graphParameterKeys,
+  ),
 });
 
 export const mapPreset = (simulation) => ({

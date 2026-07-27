@@ -3,6 +3,7 @@ import {
   clearPheromones,
   createSimulation,
   CURRENT_ENGINE_ID,
+  CURRENT_ENGINE_REVISION,
   CURRENT_ENGINE_VERSION,
   deriveMetrics,
   dominantFoodRoute,
@@ -57,6 +58,10 @@ Deno.test("the current engine satisfies the versioned registry contract", () => 
   assert(Object.isFrozen(engine));
   assertEquals(engine.id, CURRENT_ENGINE_ID);
   assertEquals(engine.version, CURRENT_ENGINE_VERSION);
+  assertEquals(engine.revision, CURRENT_ENGINE_REVISION);
+  assert(/^[0-9a-f]{40}$/u.test(engine.revision));
+  assert(Object.isFrozen(engine.capabilities));
+  assert(Object.isFrozen(engine.graphParameterKeys));
   assert(engine.defaults === current.DEFAULTS);
 
   [

@@ -1,21 +1,25 @@
 import {
   addFood,
   clearPheromones,
-  createSimulation,
+  CURRENT_ENGINE_ID,
   deriveMetrics,
   dominantFoodRoute,
+  ENGINES,
   foodProbabilitiesForNode,
+  getEngine,
   moveFood,
   removeFood,
   resetRun,
   setEndpoint,
   stepSimulation,
+  supportsEngineParameter,
   updateParams,
 } from "./colony.js";
 import {
   algorithmPreset,
   decodeConfiguration,
   encodeConfiguration,
+  GRAPH_KEYS,
   mapPreset,
   migrateAlgorithmPresetLibrary,
   sharedConfiguration,
@@ -28,6 +32,17 @@ import {
   resolveAlgorithmPreset,
 } from "./presets.js";
 import { sanitizeSimulationRate, simulatedSeconds } from "./clock.js";
+import {
+  activeFoodsFor,
+  createPlaygroundSimulation,
+  engineLabel,
+  engineNote,
+  engineSwitchNotice,
+  engineTooltip,
+  shortRevision,
+  switchSimulationEngine,
+} from "./playground.js";
+import { antViewFor, metricsViewFor, trailSegments } from "./presentation.js";
 
 const byId = (id) => document.getElementById(id);
 
@@ -46,19 +61,25 @@ const sharedHash = location.hash.startsWith("#state=")
   ? decodeConfiguration(location.hash.slice(7))
   : null;
 const initialSeed = sharedHash?.map.seed ?? readSeed();
-const initialParams = {
-  ...sharedHash?.algorithm.params,
-  ...sharedHash?.map.params,
-};
+const initialEngineId = ENGINES.some(({ id }) => id === sharedHash?.algorithm.engineId)
+  ? sharedHash.algorithm.engineId
+  : CURRENT_ENGINE_ID;
 byId("seed").value = initialSeed;
 
-let model = {
-  simulation: createSimulation({
+const initialSimulation = createPlaygroundSimulation({
+  engineId: initialEngineId,
+  params: sharedHash?.algorithm.params,
+  map: {
     seed: initialSeed,
-    params: initialParams,
+    params: sharedHash?.map.params,
     hill: sharedHash?.map.hill,
     foods: sharedHash?.map.foods,
-  }),
+  },
+});
+
+let model = {
+  simulation: initialSimulation,
+  graphParams: initialSimulation.graphParams,
   running: !prefersReducedMotion,
   simulationRate: 1,
   selectedNode: null,
@@ -67,9 +88,14 @@ let model = {
   view: { ants: true, trails: true, labels: true },
 };
 
-const replaceSimulation = (current, simulation) => ({
+const replaceSimulation = (
+  current,
+  simulation,
+  graphParams = simulation.graphParams,
+) => ({
   ...current,
   simulation,
+  graphParams,
   selectedNode: null,
   movingFood: null,
   notice: "",
@@ -99,43 +125,90 @@ const reduceModel = (current, action) => {
     case "newGraph":
       return replaceSimulation(
         current,
-        createSimulation({
-          seed: action.seed,
+        createPlaygroundSimulation({
+          engineId: current.simulation.engineId,
           params: current.simulation.params,
+          map: {
+            seed: action.seed,
+            params: current.graphParams,
+          },
         }),
       );
     case "reset":
-      return replaceSimulation(current, resetRun(current.simulation));
+      return replaceSimulation(
+        current,
+        resetRun(current.simulation),
+        current.graphParams,
+      );
     case "clear":
       return {
         ...current,
         simulation: clearPheromones(current.simulation),
       };
     case "parameter":
+      if (GRAPH_KEYS.includes(action.name)) {
+        return {
+          ...current,
+          graphParams: {
+            ...current.graphParams,
+            [action.name]: action.value,
+          },
+        };
+      }
+      if (
+        !supportsEngineParameter(
+          getEngine(current.simulation.engineId),
+          action.name,
+        )
+      ) {
+        return current;
+      }
       return {
         ...current,
         simulation: updateParams(current.simulation, {
           [action.name]: action.value,
         }),
       };
-    case "algorithmPreset":
-      return {
-        ...current,
-        simulation: updateParams(current.simulation, action.params),
-        notice: `Loaded algorithm “${action.name}”.`,
+    case "engine": {
+      const engine = getEngine(action.engineId);
+      const simulation = switchSimulationEngine(
+        current.simulation,
+        action.engineId,
+      );
+      return simulation === current.simulation ? current : {
+        ...replaceSimulation(current, simulation, current.graphParams),
+        notice: engineSwitchNotice(engine),
       };
+    }
+    case "algorithmPreset": {
+      const switched = action.engineId !== current.simulation.engineId;
+      const simulation = switched
+        ? switchSimulationEngine(
+          current.simulation,
+          action.engineId,
+          action.params,
+        )
+        : updateParams(current.simulation, action.params);
+      const engine = getEngine(action.engineId);
+      return switched
+        ? {
+          ...replaceSimulation(current, simulation, current.graphParams),
+          notice: `Loaded “${action.name}”. ${engineSwitchNotice(engine)}`,
+        }
+        : {
+          ...current,
+          simulation,
+          notice: `Loaded algorithm “${action.name}”.`,
+        };
+    }
     case "mapPreset":
       return {
         ...replaceSimulation(
           current,
-          createSimulation({
-            seed: action.map.seed,
-            params: {
-              ...current.simulation.params,
-              ...action.map.params,
-            },
-            hill: action.map.hill,
-            foods: action.map.foods,
+          createPlaygroundSimulation({
+            engineId: current.simulation.engineId,
+            params: current.simulation.params,
+            map: action.map,
           }),
         ),
         notice: `Loaded map “${action.name}”.`,
@@ -148,6 +221,7 @@ const reduceModel = (current, action) => {
       return replaceSimulation(
         current,
         setEndpoint(current.simulation, action.kind, current.selectedNode),
+        current.graphParams,
       );
     case "addFood": {
       const simulation = addFood(current.simulation, current.selectedNode);
@@ -192,6 +266,8 @@ const reduceModel = (current, action) => {
         current.movingFood,
         action.node,
       );
+      const resets = getEngine(current.simulation.engineId).capabilities.liveFood ===
+        "reset";
       return simulation === current.simulation
         ? {
           ...current,
@@ -203,9 +279,13 @@ const reduceModel = (current, action) => {
           simulation,
           selectedNode: action.node,
           movingFood: null,
-          notice: `Food moved to Node ${
-            String(action.node + 1).padStart(2, "0")
-          }. Old trails will fade naturally.`,
+          notice: resets
+            ? `Food moved to Node ${
+              String(action.node + 1).padStart(2, "0")
+            }. This revision reset its ants and trails.`
+            : `Food moved to Node ${
+              String(action.node + 1).padStart(2, "0")
+            }. Old trails will fade naturally.`,
         };
     }
     case "view":
@@ -223,7 +303,7 @@ const reduceModel = (current, action) => {
 const dispatch = (action) => {
   model = reduceModel(model, action);
   updateSharedUrl(model.simulation);
-  syncControls(model.simulation);
+  syncControls(model);
   renderInterface(model);
 };
 
@@ -234,7 +314,7 @@ const formatPercent = (value) => `${Math.round(value * 100)}%`;
 const statusCopy = (current, metrics) => {
   if (!current.running) return "Paused — inspect the signal or advance one step.";
   if (
-    current.simulation.stats.lastFoodChangeAt !== null &&
+    (current.simulation.stats.lastFoodChangeAt ?? null) !== null &&
     current.simulation.stats.bestDistance === null
   ) {
     return "Food changed. Old signals remain while the colony searches and adapts.";
@@ -255,7 +335,10 @@ const setText = (id, value) => {
 };
 
 const renderMetrics = (current) => {
-  const metrics = deriveMetrics(current.simulation);
+  const metrics = metricsViewFor(
+    current.simulation,
+    deriveMetrics(current.simulation),
+  );
   setText("delivery-count", metrics.deliveries);
   setText("returning-count", metrics.returning);
   setText("best-distance", formatDistance(metrics.selectedDistance));
@@ -305,6 +388,8 @@ const renderInspector = (current) => {
 
   const degree = simulation.graph.adjacency[selectedNode].length;
   const isFood = simulation.graph.foods.includes(selectedNode);
+  const isActiveFood = activeFoodsFor(simulation).includes(selectedNode);
+  const engine = getEngine(simulation.engineId);
   const moving = current.movingFood !== null;
   const role = selectedNode === simulation.graph.hill
     ? "Ant hill"
@@ -315,13 +400,19 @@ const renderInspector = (current) => {
   setText("selected-meta", `${role} · ${degree} connected edges`);
   byId("set-hill").disabled = moving ||
     selectedNode === simulation.graph.hill || isFood;
-  byId("add-food").hidden = moving || isFood ||
+  byId("add-food").hidden = !engine.capabilities.multipleFoods || moving || isFood ||
     selectedNode === simulation.graph.hill;
-  byId("move-food").hidden = moving || !isFood;
-  byId("remove-food").hidden = moving || !isFood;
+  byId("move-food").hidden = moving || !isActiveFood;
+  byId("remove-food").hidden = !engine.capabilities.multipleFoods || moving ||
+    !isFood;
   byId("remove-food").disabled = simulation.graph.foods.length === 1;
-  byId("food-action-help").textContent = isFood &&
-      simulation.graph.foods.length === 1
+  byId("food-action-help").textContent = engine.id === "A0"
+    ? isActiveFood
+      ? "A0 follows one food; moving it resets ants and trails."
+      : isFood
+      ? "A0 parks this food while its first food remains active."
+      : "A0 supports one active food source."
+    : isFood && simulation.graph.foods.length === 1
     ? "Move the last food source instead of removing it."
     : "";
   const rows = foodProbabilitiesForNode(simulation, selectedNode)
@@ -476,46 +567,33 @@ const drawPheromoneEdge = (
   }
 };
 
-const drawSlowPheromones = (simulation, points) =>
-  simulation.graph.edges.forEach((edge) =>
-    drawPheromoneEdge(
-      points[edge.a],
-      points[edge.b],
-      simulation.pheromones.slow[edge.a] + simulation.pheromones.slow[edge.b],
-      simulation.pheromones.slow[edge.a],
-      simulation.pheromones.slow[edge.b],
-      {
-        color: "#c58b2a",
-        faint: "rgba(197, 139, 42, 0.06)",
-        strong: (intensity) => `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
-        offset: 2.8,
-        width: (intensity) => 1 + intensity * 5.2,
-      },
-    )
-  );
+const trailStyle = (channel) =>
+  channel === "slow"
+    ? {
+      color: "#c58b2a",
+      faint: "rgba(197, 139, 42, 0.06)",
+      strong: (intensity) => `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
+      offset: 2.8,
+      width: (intensity) => 1 + intensity * 5.2,
+    }
+    : {
+      color: "#087f8c",
+      faint: "rgba(8, 127, 140, 0.08)",
+      strong: (intensity) => `rgba(8, 127, 140, ${0.35 + intensity * 0.6})`,
+      offset: -3.2,
+      width: (intensity) => 1.2 + intensity * 4.6,
+      dashed: true,
+    };
 
-const drawFastPheromones = (simulation, points) =>
-  simulation.graph.edges.forEach((edge) => {
-    const edgeModel = simulation.params.foodTrailModel === "edge";
-    const edgeLevel = simulation.pheromones.fastEdges[edge.id];
-    const fromLevel = edgeModel ? edgeLevel : simulation.pheromones.fast[edge.a];
-    const toLevel = edgeModel ? edgeLevel : simulation.pheromones.fast[edge.b];
-    drawPheromoneEdge(
-      points[edge.a],
-      points[edge.b],
-      fromLevel + toLevel,
-      fromLevel,
-      toLevel,
-      {
-        color: "#087f8c",
-        faint: "rgba(8, 127, 140, 0.08)",
-        strong: (intensity) => `rgba(8, 127, 140, ${0.35 + intensity * 0.6})`,
-        offset: -3.2,
-        width: (intensity) => 1.2 + intensity * 4.6,
-        dashed: true,
-      },
-    );
-  });
+const drawTrailSegment = (segment, points) =>
+  drawPheromoneEdge(
+    points[segment.from],
+    points[segment.to],
+    segment.amount,
+    segment.fromLevel,
+    segment.toLevel,
+    trailStyle(segment.channel),
+  );
 
 const drawHill = (point) => {
   context.save();
@@ -541,8 +619,9 @@ const drawHill = (point) => {
   context.restore();
 };
 
-const drawFood = (point) => {
+const drawFood = (point, active = true) => {
   context.save();
+  context.globalAlpha = active ? 1 : 0.36;
   context.translate(point.x, point.y);
   context.fillStyle = "#f8fbe7";
   context.strokeStyle = "#78982b";
@@ -580,13 +659,15 @@ const drawNode = (
   selected,
   moving,
   showLabels,
+  activeFoods,
 ) => {
   const isFood = simulation.graph.foods.includes(node.id);
+  const isActiveFood = activeFoods.includes(node.id);
   const compact = simulation.graph.nodes.length > 180;
   if (node.id === simulation.graph.hill) {
     drawHill(point);
   } else if (isFood) {
-    drawFood(point);
+    drawFood(point, isActiveFood);
   } else {
     context.save();
     context.fillStyle = "#fffaf0";
@@ -607,7 +688,11 @@ const drawNode = (
   const label = node.id === simulation.graph.hill
     ? "HILL"
     : isFood
-    ? simulation.graph.foods.length > 1 ? `FOOD ${foodIndex + 1}` : "FOOD"
+    ? !isActiveFood
+      ? `PARKED ${foodIndex + 1}`
+      : simulation.graph.foods.length > 1
+      ? `FOOD ${foodIndex + 1}`
+      : "FOOD"
     : String(node.id + 1).padStart(2, "0");
   context.save();
   context.font = endpoint
@@ -619,18 +704,15 @@ const drawNode = (
   context.restore();
 };
 
-const antPoint = (ant, points) =>
-  ant.edge
-    ? pointAlong(points[ant.edge.from], points[ant.edge.to], ant.edge.progress)
-    : points[ant.node];
+const antPoint = (view, points) =>
+  view.edge
+    ? pointAlong(points[view.edge.from], points[view.edge.to], view.edge.progress)
+    : points[view.node];
 
-const drawAnt = (ant, points) => {
-  const point = antPoint(ant, points);
-  const target = ant.edge ? points[ant.edge.to] : point;
+const drawAnt = (view, points) => {
+  const point = antPoint(view, points);
+  const target = view.edge ? points[view.edge.to] : point;
   const angle = Math.atan2(target.y - point.y, target.x - point.x);
-  const exploring = ant.mode === "search" &&
-    (ant.searchState.kind === "explore" ||
-      ant.edge?.exploring === true);
   context.save();
   context.translate(point.x, point.y);
   context.rotate(angle);
@@ -641,7 +723,7 @@ const drawAnt = (ant, points) => {
   context.beginPath();
   context.arc(2.4, 0, 1.8, 0, Math.PI * 2);
   context.fill();
-  if (ant.mode === "return") {
+  if (view.returning) {
     context.fillStyle = "#91bd2b";
     context.strokeStyle = "#fffaf0";
     context.lineWidth = 0.9;
@@ -650,7 +732,7 @@ const drawAnt = (ant, points) => {
     context.fill();
     context.stroke();
   }
-  if (exploring) {
+  if (view.exploring) {
     context.strokeStyle = "#e75b2a";
     context.lineWidth = 1.2;
     context.beginPath();
@@ -666,11 +748,13 @@ const drawCanvas = (current) => {
   const points = Object.fromEntries(
     current.simulation.graph.nodes.map((node) => [node.id, project(node, size)]),
   );
+  const activeFoods = activeFoodsFor(current.simulation);
   drawLeadingRoute(current.simulation, points);
   drawBaseEdges(current.simulation, points);
   if (current.view.trails) {
-    drawSlowPheromones(current.simulation, points);
-    drawFastPheromones(current.simulation, points);
+    trailSegments(current.simulation).forEach((segment) =>
+      drawTrailSegment(segment, points)
+    );
   }
   current.simulation.graph.nodes.forEach((node) =>
     drawNode(
@@ -680,11 +764,14 @@ const drawCanvas = (current) => {
       node.id === current.selectedNode,
       node.id === current.movingFood,
       current.view.labels,
+      activeFoods,
     )
   );
   if (current.view.ants) {
     const limit = size.width < 620 ? 72 : current.simulation.ants.length;
-    current.simulation.ants.slice(0, limit).forEach((ant) => drawAnt(ant, points));
+    current.simulation.ants.slice(0, limit).forEach((ant) =>
+      drawAnt(antViewFor(current.simulation, ant), points)
+    );
   }
 };
 
@@ -832,14 +919,49 @@ const sliderConfigs = [
   ],
 ];
 
-const syncControls = (simulation) => {
+const setControlSupport = (input, name, supported, engine) => {
+  input.disabled = !supported;
+  input.closest(".slider-row").dataset.supported = String(supported);
+  input.title = supported
+    ? CONTROL_HELP[name]
+    : `${engine.id} — ${engine.name} does not define this parameter.`;
+};
+
+const syncControls = (current) => {
+  const { simulation } = current;
+  const engine = getEngine(simulation.engineId);
   sliderConfigs.forEach(([name, , format, toInput]) => {
     const input = byId(name);
-    const value = toInput(simulation.params[name]);
-    input.value = value;
-    byId(`${name}-value`).textContent = format(value);
+    const graphControl = GRAPH_KEYS.includes(name);
+    const supported = graphControl ||
+      supportsEngineParameter(engine, name);
+    const parameter = graphControl
+      ? current.graphParams[name]
+      : simulation.params[name];
+    setControlSupport(input, name, supported, engine);
+    if (supported) {
+      const value = toInput(parameter);
+      input.value = value;
+      byId(`${name}-value`).textContent = format(value);
+    } else {
+      byId(`${name}-value`).textContent = "not available";
+    }
   });
-  byId("foodTrailModel").value = simulation.params.foodTrailModel;
+  const foodTrailModel = byId("foodTrailModel");
+  const supportsFoodTrail = supportsEngineParameter(engine, "foodTrailModel");
+  setControlSupport(
+    foodTrailModel,
+    "foodTrailModel",
+    supportsFoodTrail,
+    engine,
+  );
+  if (supportsFoodTrail) {
+    foodTrailModel.value = simulation.params.foodTrailModel;
+  }
+  byId("engineId").value = simulation.engineId;
+  setText("engine-revision", shortRevision(engine));
+  setText("engine-note", engineNote(engine));
+  byId("engineId").title = engineTooltip(engine);
   byId("seed").value = simulation.graphSeed;
 };
 
@@ -850,6 +972,15 @@ const updateSharedUrl = (simulation) => {
     "",
     `${location.pathname}${location.search}#state=${encoded}`,
   );
+};
+
+const renderEngineOptions = () => {
+  const options = ENGINES.map((engine) => {
+    const option = new Option(engineLabel(engine), engine.id);
+    option.title = engineTooltip(engine);
+    return option;
+  });
+  byId("engineId").replaceChildren(...options);
 };
 
 sliderConfigs.forEach(([name, parse, format]) => {
@@ -868,6 +999,11 @@ byId("foodTrailModel").addEventListener("change", (event) =>
     type: "parameter",
     name: "foodTrailModel",
     value: event.currentTarget.value,
+  }));
+byId("engineId").addEventListener("change", (event) =>
+  dispatch({
+    type: "engine",
+    engineId: event.currentTarget.value,
   }));
 byId("simulationRate").addEventListener("change", (event) =>
   dispatch({
@@ -921,8 +1057,11 @@ const syncAlgorithmPresetActions = () => {
 };
 
 const presetOption = (preset, value) => {
-  const option = new Option(preset.name, value);
-  option.title = preset.description;
+  const suffix = preset.engineId === undefined ? "" : ` · ${preset.engineId}`;
+  const option = new Option(`${preset.name}${suffix}`, value);
+  option.title = preset.engineId === undefined
+    ? preset.description
+    : `${preset.description} Engine: ${preset.engineId}.`;
   return option;
 };
 
@@ -950,6 +1089,7 @@ const renderAlgorithmPresetOptions = (selected = "") => {
         {
           name,
           description: "Saved in this browser.",
+          engineId: algorithmPresets[name].engineId,
         },
         presetRef("user", name),
       )
@@ -1056,6 +1196,7 @@ byId("load-algorithm-preset").addEventListener("click", () => {
     dispatch({
       type: "algorithmPreset",
       name: selection.name,
+      engineId: selection.engineId,
       params: selection.params,
     });
   }
@@ -1204,7 +1345,8 @@ const frame = (time) => {
   requestAnimationFrame(frame);
 };
 
-syncControls(model.simulation);
+renderEngineOptions();
+syncControls(model);
 updateSharedUrl(model.simulation);
 renderInterface(model);
 requestAnimationFrame(frame);

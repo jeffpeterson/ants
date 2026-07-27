@@ -1,11 +1,13 @@
-import { CURRENT_ENGINE_ID } from "../src/colony.js";
+import { CURRENT_ENGINE_ID, ENGINES } from "../src/colony.js";
 import {
+  algorithmPreset,
   decodeConfiguration,
   encodeConfiguration,
   migrateAlgorithmPreset,
   migrateAlgorithmPresetLibrary,
   migrateConfiguration,
 } from "../src/config.js";
+import { createPlaygroundSimulation } from "../src/playground.js";
 
 const assert = (condition, message = "Assertion failed") => {
   if (!condition) throw new Error(message);
@@ -121,4 +123,45 @@ Deno.test("legacy localStorage libraries migrate entry by entry", () => {
   });
   assertEquals(migrateAlgorithmPresetLibrary(null), {});
   assertEquals(stored.legacy, { speed: 0.2 });
+});
+
+Deno.test("engine algorithms retain behavior and omit their graph recipe", () => {
+  ENGINES.forEach((engine) => {
+    const simulation = createPlaygroundSimulation({
+      engineId: engine.id,
+      map: {
+        seed: 91,
+        params: {
+          nodeCount: 16,
+          density: 0.35,
+          mapVariation: 0.8,
+        },
+      },
+    });
+    const algorithm = algorithmPreset(simulation);
+    const expected = Object.keys(engine.defaults)
+      .filter((key) => !engine.graphParameterKeys.includes(key))
+      .toSorted();
+
+    assertEquals(algorithm.engineId, engine.id);
+    assertEquals(Object.keys(algorithm.params).toSorted(), expected, engine.id);
+    engine.graphParameterKeys.forEach((key) =>
+      assert(!Object.hasOwn(algorithm.params, key), `${engine.id}.${key}`)
+    );
+    const configuration = {
+      version: 2,
+      algorithm,
+      map: {
+        seed: simulation.graphSeed,
+        params: simulation.graphParams,
+        hill: simulation.graph.hill,
+        foods: simulation.graph.foods,
+      },
+    };
+    assertEquals(
+      decodeConfiguration(encodeConfiguration(configuration)),
+      configuration,
+      engine.id,
+    );
+  });
 });

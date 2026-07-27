@@ -1,5 +1,6 @@
 import { CURRENT_ENGINE_ID, DEFAULTS } from "../src/colony.js";
-import { ALGORITHM_KEYS, selectParameters } from "../src/config.js";
+import { ALGORITHM_KEYS, algorithmPreset, selectParameters } from "../src/config.js";
+import { createPlaygroundSimulation } from "../src/playground.js";
 import {
   BUILT_IN_ALGORITHM_PRESETS,
   parsePresetRef,
@@ -79,6 +80,34 @@ Deno.test("built-ins and user presets resolve independently", () => {
   assertEquals(resolvedTagged.params.exploreRate, 0.1);
   assert(!Object.hasOwn(resolvedTagged.params, "foodTrailModel"));
   assertEquals(resolveAlgorithmPreset("builtin:missing", users), null);
+});
+
+Deno.test("saved historical presets round-trip their engine parameters", () => {
+  const simulation = createPlaygroundSimulation({
+    engineId: "A1",
+    params: {
+      scoutRate: 0.23,
+      slowAvoidance: 0.81,
+    },
+    map: {
+      seed: 31,
+      params: {
+        nodeCount: 16,
+        density: 0.3,
+        mapVariation: 0.7,
+      },
+    },
+  });
+  const saved = algorithmPreset(simulation);
+  const resolved = resolveAlgorithmPreset("user:archived", {
+    archived: saved,
+  });
+
+  assertEquals(resolved.engineId, "A1");
+  assertEquals(resolved.params, saved.params);
+  assertEquals(resolved.params.scoutRate, 0.23);
+  assertEquals(resolved.params.slowAvoidance, 0.81);
+  assert(!Object.hasOwn(resolved.params, "nodeCount"));
 });
 
 Deno.test("static controls exactly reproduce optimized defaults", async () => {

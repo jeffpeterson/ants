@@ -1,4 +1,4 @@
-import { CURRENT_ENGINE_ID, DEFAULTS } from "./colony.js";
+import { CURRENT_ENGINE_ID, DEFAULTS, getEngine } from "./colony.js";
 import { ALGORITHM_KEYS, migrateAlgorithmPreset, selectParameters } from "./config.js";
 
 const completeAlgorithm = (overrides = {}) =>
@@ -8,7 +8,13 @@ const completeAlgorithm = (overrides = {}) =>
 
 const resolveParameters = (algorithm) =>
   algorithm.engineId === CURRENT_ENGINE_ID
-    ? completeAlgorithm(algorithm.params)
+    ? Object.freeze(
+      Object.fromEntries(
+        Object.entries({ ...DEFAULTS, ...algorithm.params }).filter(([key]) =>
+          !getEngine(CURRENT_ENGINE_ID).graphParameterKeys.includes(key)
+        ),
+      ),
+    )
     : Object.freeze({ ...algorithm.params });
 
 const builtIn = (id, name, description, overrides = {}) =>

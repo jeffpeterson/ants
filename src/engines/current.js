@@ -469,14 +469,19 @@ const generateAnts = (count, hill, seed, startId = 0) => ({
 
 export const createSimulation = ({
   seed = 1837,
+  graphSeed: suppliedGraphSeed,
   runSeed,
   params: values = {},
   hill,
   foods,
+  graph: suppliedGraph,
+  graphParams: suppliedGraphParams,
 } = {}) => {
   const params = sanitizeParams(values);
-  const graphSeed = Number(seed) >>> 0;
-  const [generatedGraph, graphRngSeed] = generateGraph(graphSeed, params);
+  const graphSeed = Number(suppliedGraphSeed ?? seed) >>> 0;
+  const [generatedGraph, graphRngSeed] = suppliedGraph === undefined
+    ? generateGraph(graphSeed, params)
+    : [suppliedGraph, (graphSeed ^ 0x9e3779b9) >>> 0];
   const savedHill = Object.hasOwn(generatedGraph.adjacency, hill) ? hill : null;
   const selectedHill = savedHill ?? generatedGraph.hill;
   const savedFoods = Array.isArray(foods)
@@ -484,7 +489,7 @@ export const createSimulation = ({
       Object.hasOwn(generatedGraph.adjacency, food) && food !== selectedHill
     )
     : [];
-  const graph = {
+  const graph = suppliedGraph ?? {
     ...generatedGraph,
     hill: selectedHill,
     foods: savedFoods.length > 0 ? savedFoods : generatedGraph.foods,
@@ -498,7 +503,7 @@ export const createSimulation = ({
 
   return {
     graphSeed,
-    graphParams: graphParameters(params),
+    graphParams: suppliedGraphParams ?? graphParameters(params),
     rngSeed: generatedAnts.rngSeed,
     elapsed: 0,
     params,

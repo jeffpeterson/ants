@@ -14,13 +14,20 @@ const arcIds = (graph) => graph.edges.flatMap(({ a, b }) => [`${a}>${b}`, `${b}>
 
 const validEndpoint = (graph, node) => Object.hasOwn(graph.adjacency, node);
 
+const sameNodes = (first, second) =>
+  first.length === second.length &&
+  first.every((node, index) => node === second[index]);
+
 const selectedFoods = (graph, hill, requested) => {
   const candidates = requested ??
     graph.foods ??
     (graph.food === undefined ? [] : [graph.food]);
-  return [...new Set(candidates)].filter((food) =>
+  const selected = [...new Set(candidates)].filter((food) =>
     validEndpoint(graph, food) && food !== hill
   );
+  return graph.foods !== undefined && sameNodes(selected, graph.foods)
+    ? graph.foods
+    : selected;
 };
 
 const graphForEngine = (graph, spec, options = {}) => {
@@ -29,20 +36,23 @@ const graphForEngine = (graph, spec, options = {}) => {
   if (foods.length === 0) {
     throw new Error(`${spec.id} requires at least one valid food source`);
   }
-  const mappedFoods = spec.singleFood ? foods.slice(0, 1) : foods;
-  return spec.singleFood
-    ? { ...graph, hill, food: mappedFoods[0], foods: mappedFoods }
-    : { ...graph, hill, foods: mappedFoods };
+  if (spec.singleFood) {
+    const adapted = { ...graph, hill, food: foods[0], foods };
+    return Object.isFrozen(graph) ? freeze(adapted) : adapted;
+  }
+  return hill === graph.hill && foods === graph.foods
+    ? graph
+    : { ...graph, hill, foods };
 };
 
 const normalizeGraph = (graph, spec) => {
   if (!spec.singleFood) return graph;
   const food = graph.food ?? graph.foods?.[0];
+  const foods = graph.foods ?? [food];
   return graph.food === food &&
-      graph.foods?.length === 1 &&
-      graph.foods[0] === food
+      graph.foods === foods
     ? graph
-    : { ...graph, food, foods: [food] };
+    : { ...graph, food, foods };
 };
 
 const resourceParams = (values = {}, resources = {}) => ({
@@ -428,15 +438,29 @@ export const historicalEngine = (metadata, source, schema) => {
     );
   const noEdit = (state) => state;
   const moveSingleFood = (state, sourceId, destinationId) =>
-    sourceId !== state.graph.food ? state : transition(
-      state,
-      spec,
-      (current) =>
-        withRunSeed(
-          current,
-          (seeded) => source.setEndpoint(seeded, "food", destinationId),
-        ),
-    );
+    sourceId !== state.graph.food ||
+      state.graph.foods.includes(destinationId)
+      ? state
+      : transition(
+        state,
+        spec,
+        (current) =>
+          withRunSeed(
+            current,
+            (seeded) => {
+              const moved = source.setEndpoint(seeded, "food", destinationId);
+              return moved === seeded ? seeded : {
+                ...moved,
+                graph: {
+                  ...moved.graph,
+                  foods: current.graph.foods.map((food, index) =>
+                    index === 0 ? destinationId : food
+                  ),
+                },
+              };
+            },
+          ),
+      );
   const probabilities = schema.probabilities === "food"
     ? (state, nodeId) => source.foodProbabilitiesForNode(state, nodeId)
     : (state, nodeId) => source.probabilitiesForAntAtNode(state, nodeId, false);
@@ -449,6 +473,7 @@ export const historicalEngine = (metadata, source, schema) => {
     family: metadata.family,
     traits: metadata.traits,
     defaults: source.DEFAULTS,
+    graphParameterKeys: spec.graphParams,
     capabilities: freeze({
       commonGraph: true,
       nativeGraph: true,

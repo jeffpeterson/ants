@@ -485,6 +485,24 @@ h2 {
   font: 650 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.engine-note {
+  margin: -3px 0 2px;
+  color: var(--muted);
+  font: 600 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.slider-row[data-supported="false"] {
+  opacity: 0.52;
+}
+
+.slider-row[data-supported="false"] > span {
+  cursor: not-allowed;
+}
+
+.slider-row[data-supported="false"] output {
+  color: var(--muted);
+}
+
 .slider-row select {
   width: 100%;
   height: 36px;
