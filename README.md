@@ -65,6 +65,17 @@ strictly higher home-potential endpoint. A playground lever stores it either as 
 node levels or on undirected edges; both live fields are maintained so the model can
 change without resetting the colony. There are no directional pheromone records.
 
+At pickup, the ant compares the food node with the endpoint it just arrived from. Its
+carried deposit is:
+
+```text
+max(normalDeposit, newTrailShare × incomingFoodSignal − foodNodeSignal)
+```
+
+The default `newTrailShare` is `20%`. This gives a newly marked route a locally
+competitive first return without flattening established pheromone differences. The ant
+carries only that scalar deposit strength until delivery; it does not remember a route.
+
 In node mode, option `u → v` reads the food level at the opposite endpoint `v`. The
 renderer interpolates endpoint levels along the edge and can draw their current slope:
 

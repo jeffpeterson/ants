@@ -8,6 +8,7 @@ import {
 export {
   choiceProbabilities,
   clamp,
+  competitiveFoodDeposit,
   decayPheromones,
   DEFAULTS,
   edgeKey,

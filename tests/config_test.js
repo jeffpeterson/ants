@@ -38,7 +38,11 @@ Deno.test("v1 share URLs migrate to the scalar-field v2 shape", () => {
     version: 2,
     algorithm: {
       engineId: CURRENT_ENGINE_ID,
-      params: { ...legacy.algorithm, trailJoinChance: 0 },
+      params: {
+        ...legacy.algorithm,
+        trailJoinChance: 0,
+        newTrailSignalShare: 0,
+      },
     },
     map,
   });
@@ -67,7 +71,11 @@ Deno.test("recruitment migration preserves explicit values and old behavior", ()
     version: 2,
     algorithm: {
       engineId: CURRENT_ENGINE_ID,
-      params: { speed: 0.12, trailJoinChance: 0.06 },
+      params: {
+        speed: 0.12,
+        trailJoinChance: 0.06,
+        newTrailSignalShare: 0.2,
+      },
     },
     map,
   };
@@ -82,7 +90,7 @@ Deno.test("recruitment migration preserves explicit values and old behavior", ()
   assertEquals(decodeConfiguration(encodeConfiguration(explicit)), explicit);
   assertEquals(
     decodeConfiguration(encodeConfiguration(old)).algorithm.params,
-    { speed: 0.12, trailJoinChance: 0 },
+    { speed: 0.12, trailJoinChance: 0, newTrailSignalShare: 0 },
   );
 });
 
@@ -117,7 +125,7 @@ Deno.test("user algorithm preset migration accepts legacy and tagged values", ()
 
   assertEquals(migrateAlgorithmPreset(legacy), {
     engineId: CURRENT_ENGINE_ID,
-    params: { ...legacy, trailJoinChance: 0 },
+    params: { ...legacy, trailJoinChance: 0, newTrailSignalShare: 0 },
   });
   assertEquals(migrateAlgorithmPreset(tagged), {
     engineId: "another-engine",
@@ -141,7 +149,11 @@ Deno.test("legacy localStorage libraries migrate entry by entry", () => {
   assertEquals(migrateAlgorithmPresetLibrary(stored), {
     legacy: {
       engineId: CURRENT_ENGINE_ID,
-      params: { ...stored.legacy, trailJoinChance: 0 },
+      params: {
+        ...stored.legacy,
+        trailJoinChance: 0,
+        newTrailSignalShare: 0,
+      },
     },
     tagged: stored.tagged,
   });

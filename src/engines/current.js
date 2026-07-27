@@ -20,6 +20,7 @@ export const DEFAULTS = Object.freeze({
   trailJoinChance: 0.25,
   choiceFloor: 0,
   foodTrailModel: "node",
+  newTrailSignalShare: 0.2,
   headingInfluence: 1.58,
   fastDeposit: 0.72,
   distanceInfluence: 0.41,
@@ -89,6 +90,11 @@ export const sanitizeParams = (values = {}) => ({
     finiteOr(DEFAULTS.choiceFloor, values.choiceFloor),
   ),
   foodTrailModel: values.foodTrailModel === "edge" ? "edge" : "node",
+  newTrailSignalShare: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.newTrailSignalShare, values.newTrailSignalShare),
+  ),
   headingInfluence: clamp(
     0,
     4,
@@ -471,6 +477,7 @@ const makeAnt = (id, hill, launchDelay) => ({
   previous: null,
   tripDistance: 0,
   turnAround: null,
+  foodDeposit: 0,
   searchState: { kind: "explore", frontierArmed: false },
   exploreChoices: 0,
   followChoices: 0,
@@ -972,7 +979,25 @@ const startEdge = (ant, graph, pheromones, params, seed) =>
     ? startReturnEdge(ant, graph, pheromones, params, seed)
     : startSearchEdge(ant, graph, pheromones, params, seed);
 
-const beginReturn = (ant) => {
+export const competitiveFoodDeposit = (
+  level,
+  competingLevel,
+  base,
+  share,
+) => Math.max(base, share * competingLevel - level);
+
+const foodDepositAt = (node, previous, pheromones, params) => {
+  const localLevel = pheromones.fast[node] ?? 0;
+  const competingLevel = previous === null ? 0 : pheromones.fast[previous] ?? 0;
+  return competitiveFoodDeposit(
+    localLevel,
+    competingLevel,
+    params.fastDeposit,
+    params.newTrailSignalShare,
+  );
+};
+
+const beginReturn = (ant, deposit) => {
   return {
     ant: {
       ...ant,
@@ -981,6 +1006,7 @@ const beginReturn = (ant) => {
       searchState: { kind: "follow" },
       turnAround: ant.previous,
       previous: null,
+      foodDeposit: deposit,
     },
     events: [{
       type: "discovery",
@@ -992,7 +1018,7 @@ const beginReturn = (ant) => {
   };
 };
 
-const arriveSearching = (ant, graph) => {
+const arriveSearching = (ant, graph, pheromones, params) => {
   const atHill = ant.edge.to === graph.hill;
   const arrived = {
     ...ant,
@@ -1003,7 +1029,15 @@ const arriveSearching = (ant, graph) => {
     searchState: atHill ? { kind: "follow" } : ant.searchState,
   };
   return graph.foods.includes(ant.edge.to)
-    ? beginReturn(arrived)
+    ? beginReturn(
+      arrived,
+      foodDepositAt(
+        ant.edge.to,
+        ant.edge.from,
+        pheromones,
+        params,
+      ),
+    )
     : { ant: arrived, events: [], deposits: [] };
 };
 
@@ -1027,6 +1061,7 @@ const arriveReturning = (ant, graph) => {
         searchState: { kind: "follow" },
         tripDistance: 0,
         turnAround: null,
+        foodDeposit: 0,
         trips: ant.trips + 1,
       },
       events: [{
@@ -1053,8 +1088,15 @@ const arrive = (ant, graph, pheromones, params) => {
       },
     ]
     : [];
-  const result = returning ? arriveReturning(ant, graph) : arriveSearching(ant, graph);
+  const result = returning
+    ? arriveReturning(ant, graph)
+    : arriveSearching(ant, graph, pheromones, params);
   const foundFood = !returning && graph.foods.includes(ant.edge.to);
+  const foodDeposit = returning
+    ? ant.foodDeposit > EPSILON ? ant.foodDeposit : params.fastDeposit
+    : foundFood
+    ? result.ant.foodDeposit
+    : params.fastDeposit;
   const homeward = returning &&
     (pheromones.slow[ant.edge.to] ?? 0) >
       (pheromones.slow[ant.edge.from] ?? 0) + EPSILON;
@@ -1063,13 +1105,13 @@ const arrive = (ant, graph, pheromones, params) => {
       {
         channel: "fast",
         target: ant.edge.to,
-        amount: params.fastDeposit,
+        amount: foodDeposit,
         combine: "add",
       },
       {
         channel: "fastEdges",
         target: edgeKey(ant.edge.from, ant.edge.to),
-        amount: params.fastDeposit,
+        amount: foodDeposit,
         combine: "add",
       },
     ]
@@ -1125,7 +1167,15 @@ const advanceAnt = (
 
   const discovered = ant.mode === "search" && ant.edge === null &&
       graph.foods.includes(ant.node)
-    ? beginReturn(ant)
+    ? beginReturn(
+      ant,
+      foodDepositAt(
+        ant.node,
+        ant.previous,
+        pheromones,
+        params,
+      ),
+    )
     : null;
   if (discovered) {
     const continued = advanceAnt(

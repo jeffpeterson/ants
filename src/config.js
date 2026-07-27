@@ -9,6 +9,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "trailJoinChance",
   "choiceFloor",
   "foodTrailModel",
+  "newTrailSignalShare",
   "reversePenalty",
   "speed",
   "headingInfluence",
@@ -50,8 +51,14 @@ const isEngineAlgorithm = (value) =>
   isRecord(value.params);
 
 const migrateParams = (engineId, params) =>
-  engineId === CURRENT_ENGINE_ID && !Object.hasOwn(params, "trailJoinChance")
-    ? { ...params, trailJoinChance: 0 }
+  engineId === CURRENT_ENGINE_ID
+    ? {
+      ...params,
+      ...(!Object.hasOwn(params, "trailJoinChance") ? { trailJoinChance: 0 } : {}),
+      ...(!Object.hasOwn(params, "newTrailSignalShare")
+        ? { newTrailSignalShare: 0 }
+        : {}),
+    }
     : params;
 
 export const migrateAlgorithmPreset = (value) => {

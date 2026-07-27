@@ -45,6 +45,8 @@ export const CONTROL_HELP = Object.freeze({
     "Favor shorter adjacent edges. Zero ignores edge length; higher values strengthen the preference.",
   choiceFloor:
     "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
+  newTrailSignalShare:
+    "At pickup, a weak food node makes the ant carry enough pheromone to target this fraction of the signal at the endpoint it arrived from. Zero always uses the normal deposit.",
   foodTrailModel:
     "Use scalar node levels for derived slopes along carrier-traversed edges, or use undirected edge strength with no slope. Neither mode marks adjacent untraversed branches.",
   fastInfluence:

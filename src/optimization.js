@@ -10,7 +10,7 @@ import {
 } from "./colony.js";
 import { ALGORITHM_KEYS } from "./config.js";
 
-export const EVALUATION_VERSION = 3;
+export const EVALUATION_VERSION = 4;
 
 export const OPTIMIZED_KEYS = Object.freeze([
   "exploreRate",
@@ -19,6 +19,7 @@ export const OPTIMIZED_KEYS = Object.freeze([
   "unchartedPreference",
   "trailJoinChance",
   "choiceFloor",
+  "newTrailSignalShare",
   "reversePenalty",
   "headingInfluence",
   "distanceInfluence",
@@ -45,6 +46,7 @@ export const PARAMETER_SPECS = Object.freeze([
   { key: "unchartedPreference", min: 0, max: 1, scale: "linear" },
   { key: "trailJoinChance", min: 0, max: 1, scale: "linear" },
   { key: "choiceFloor", min: 0, max: 1, scale: "power", power: 2 },
+  { key: "newTrailSignalShare", min: 0, max: 0.5, scale: "power", power: 2 },
   { key: "reversePenalty", min: 0.01, max: 1, scale: "log" },
   { key: "headingInfluence", min: 0, max: 4, scale: "power", power: 2 },
   { key: "distanceInfluence", min: 0, max: 2, scale: "linear" },
@@ -65,6 +67,7 @@ export const HYPOTHESIS_PARAMS = Object.freeze({
   unchartedPreference: 1,
   trailJoinChance: 0.5,
   choiceFloor: 1,
+  newTrailSignalShare: 0.2,
   foodTrailModel: "node",
   reversePenalty: 0.15,
   headingInfluence: 1.2,

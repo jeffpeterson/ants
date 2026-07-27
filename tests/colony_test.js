@@ -1,6 +1,7 @@
 import {
   addFood,
   choiceProbabilities,
+  competitiveFoodDeposit,
   createSimulation,
   decayPheromones,
   dominantFoodRoute,
@@ -278,6 +279,72 @@ Deno.test("a branch reads the signal at its opposite node", () => {
   assert(
     Math.abs(choices[1].probability / choices[0].probability - expected) < 1e-9,
   );
+});
+
+Deno.test("a food pickup recruits from only its incoming signal", () => {
+  assertEquals(competitiveFoodDeposit(0, 72, 0.72, 0.2), 14.4);
+  assertEquals(competitiveFoodDeposit(14.4, 72, 0.72, 0.2), 0.72);
+  assertEquals(competitiveFoodDeposit(0, 72, 0.72, 0), 0.72);
+
+  const initial = testSimulation({
+    seed: 31,
+    params: {
+      nodeCount: 24,
+      density: 0.3,
+      antCount: 8,
+      newTrailSignalShare: 0.2,
+    },
+  });
+  const food = initial.graph.foods[0];
+  const neighbor = initial.graph.adjacency[food][0];
+  const remote = initial.graph.nodes.find(({ id }) =>
+    id !== food &&
+    id !== neighbor &&
+    !initial.graph.adjacency[food].includes(id)
+  )?.id;
+  assert(remote !== undefined);
+  const ant = {
+    ...initial.ants[0],
+    node: food,
+    launchDelay: 0,
+    previous: neighbor,
+    searchState: { kind: "follow" },
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    ants: [ant],
+    pheromones: {
+      ...initial.pheromones,
+      fast: {
+        ...initial.pheromones.fast,
+        [neighbor]: 10,
+        [remote]: 1_000,
+      },
+    },
+  }, 0.001);
+
+  assert(Math.abs(stepped.ants[0].foodDeposit - 2) < 0.001);
+});
+
+Deno.test("a recruited new food branch remains a meaningful local option", () => {
+  const pheromones = {
+    slow: { 0: 0, 1: 0, 2: 0 },
+    fast: { 0: 72, 1: 72, 2: 14.4 },
+    fastEdges: {
+      [edgeKey(0, 1)]: 72,
+      [edgeKey(0, 2)]: 14.4,
+    },
+  };
+  const probability = (foodTrailModel) =>
+    choiceProbabilities(
+      0,
+      [1, 2],
+      pheromones,
+      parameters({ foodTrailModel }),
+    ).find(({ node }) => node === 2).probability;
+
+  assert(probability("node") > 0.1);
+  assert(probability("edge") > 0.1);
 });
 
 Deno.test("node food signal is visible only along traversed edges", () => {
@@ -1103,6 +1170,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "distanceInfluence",
     "choiceFloor",
     "foodTrailModel",
+    "newTrailSignalShare",
     "fastInfluence",
     "outboundPolarity",
     "homewardPreference",

@@ -876,6 +876,12 @@ const sliderConfigs = [
     (value) => value * 100,
   ],
   [
+    "newTrailSignalShare",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
     "fastInfluence",
     (value) => Number(value) / 10,
     influenceLabel,

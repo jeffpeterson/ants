@@ -417,6 +417,50 @@ deno task evaluate -- \
   --set=trailJoinChance=0.06
 ```
 
+## New-food competition
+
+The preregistered mechanism hypothesis was that the weak-route failure occurs after
+successful discovery and deposition: raw additive food signal lets a mature route
+outweigh the first mark on a newly added route by roughly `100:1`. The promotion gates
+were:
+
+- use only signal at the ant's current node and its immediate neighbors;
+- give a newly returned, locally marked branch meaningful traffic;
+- preserve the 12-map shortest-route regression;
+- avoid a material stable-throughput or moved-food regression.
+
+A deterministic home-junction fixture confirmed the failure. With mature signal `72` and
+one new deposit `0.72`, the new branch received `0.47%` in node mode and `1.01%` in edge
+mode. Several broad corrections were rejected:
+
+| Candidate                         | Confirmation throughput | Outcome                                   |
+| --------------------------------- | ----------------------: | ----------------------------------------- |
+| Existing additive field           |                   0.593 | Control                                   |
+| Bounded field, cap `1`            |                       — | Failed the 12-map shortest-route gate     |
+| Bounded field, cap `5`            |                   0.469 | Preserved route gate but lost throughput  |
+| 20% uniform marked-branch mixture |                   0.336 | Preserved ordering but taxed every choice |
+| Square-root sensory response      |                   0.484 | Compressed useful lap-frequency evidence  |
+
+The promoted rule changes deposition only when the pickup node is weak beside the
+endpoint the ant just arrived from:
+
+```text
+carriedDeposit =
+  max(normalDeposit, share × incomingSignal − foodNodeSignal)
+```
+
+At `share = 20%`, the 24-map confirmation score increased from `53.306` to `53.386`.
+Throughput (`0.5932`) and efficiency (`0.8379`) were unchanged, while adaptation rose
+from `0.3029` to `0.3047`; failure rates were unchanged. The 12-map leading-route gate
+also passed.
+
+A separate added-food fixture warmed each of 12 maps for 80 simulated seconds, added
+food on an untouched edge adjacent to home, then measured the new branch. On the two
+control maps exhibiting starvation, its immediate share changed from `0.52%` to `8.53%`
+and from `0.68%` to `10.54%`. After 30 seconds those shares were `11.29%` and `33.93%`,
+versus `0.39%` and `2.82%` in the control. Old saved algorithms migrate this lever to
+zero so their behavior remains reproducible.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:

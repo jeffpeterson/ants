@@ -128,6 +128,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     unchartedPreference: 100,
     trailJoinChance: 100,
     choiceFloor: 100,
+    newTrailSignalShare: 100,
     reversePenalty: 100,
     speed: 100,
     headingInfluence: 10,
