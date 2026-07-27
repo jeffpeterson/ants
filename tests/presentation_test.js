@@ -1,6 +1,7 @@
 import { deriveMetrics, ENGINES, stepSimulation } from "../src/colony.js";
 import { createPlaygroundSimulation } from "../src/playground.js";
 import {
+  antStateCountsFor,
   antViewFor,
   metricsViewFor,
   trailSegments,
@@ -88,9 +89,20 @@ Deno.test("current node and edge trail rendering retains scalar parity", () => {
   }]);
 
   const ant = antViewFor(initial, initial.ants[0]);
+  assertEquals(ant.state, "scouting");
   assertEquals(ant.exploring, true);
   assertEquals(ant.returning, false);
+  assertEquals(ant.scouting, true);
+  assertEquals(ant.frontier, false);
+  assertEquals(ant.escaping, false);
   assertEquals(ant.node, initial.graph.hill);
+  assertEquals(antStateCountsFor(initial), {
+    following: 0,
+    scouting: initial.ants.length,
+    frontier: 0,
+    escaping: 0,
+    carrying: 0,
+  });
 });
 
 Deno.test("all engine schemas normalize trails, ants, and metrics for rendering", () => {
@@ -125,6 +137,14 @@ Deno.test("all engine schemas normalize trails, ants, and metrics for rendering"
       assert(Number.isInteger(view.id));
       assert(typeof view.returning === "boolean");
       assert(typeof view.exploring === "boolean");
+      assert(typeof view.scouting === "boolean");
+      assert(typeof view.frontier === "boolean");
+      assert(typeof view.escaping === "boolean");
+      assert(
+        ["following", "scouting", "frontier", "escaping", "carrying"].includes(
+          view.state,
+        ),
+      );
       if (view.edge !== null) {
         assert(Number.isFinite(view.edge.progress));
         assert(view.edge.progress >= 0 && view.edge.progress <= 1);
@@ -139,8 +159,22 @@ Deno.test("all engine schemas normalize trails, ants, and metrics for rendering"
       "signalFocus",
       "returning",
       "exploring",
+      "following",
+      "scouting",
+      "frontier",
+      "escaping",
+      "carrying",
       "foods",
     ].forEach((key) => assert(Number.isFinite(metrics[key]), `${engine.id}.${key}`));
+    assertEquals(
+      metrics.following +
+        metrics.scouting +
+        metrics.frontier +
+        metrics.escaping +
+        metrics.carrying,
+      simulation.ants.length,
+      `${engine.id} state counts must partition the colony`,
+    );
     assert(
       metrics.selectedDistance === null ||
         Number.isFinite(metrics.selectedDistance),

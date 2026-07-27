@@ -95,50 +95,98 @@ export const trailSegments = (simulation) => {
   );
 };
 
-const exploringKinds = new Set([
+const escapingKinds = new Set([
   "backtrack",
-  "discover",
   "escape",
+]);
+
+const scoutingKinds = new Set([
+  "discover",
   "explore",
   "probe",
 ]);
 
-export const antViewFor = (simulation, ant) => ({
-  id: ant.id,
-  node: ant.node,
-  edge: ant.edge === null ? null : {
-    from: ant.edge.from,
-    to: ant.edge.to,
-    progress: Math.min(1, Math.max(0, Number(ant.edge.progress) || 0)),
-  },
-  returning: ant.mode === "return",
-  exploring: ant.mode === "search" &&
+export const antStateFor = (simulation, ant) => {
+  if (ant.mode === "return") return "carrying";
+  if (escapingKinds.has(ant.searchState?.kind)) return "escaping";
+  if (
+    ant.searchState?.kind === "explore" &&
+    ant.searchState.frontierArmed === true
+  ) {
+    return "frontier";
+  }
+  if (
+    ant.mode === "search" &&
     (
       ant.edge?.exploring === true ||
-      exploringKinds.has(ant.searchState?.kind) ||
+      scoutingKinds.has(ant.searchState?.kind) ||
       (
         Number.isFinite(ant.scoutScore) &&
         ant.scoutScore < simulation.params.scoutRate
       )
-    ),
+    )
+  ) {
+    return "scouting";
+  }
+  return "following";
+};
+
+const EMPTY_ANT_STATES = Object.freeze({
+  following: 0,
+  scouting: 0,
+  frontier: 0,
+  escaping: 0,
+  carrying: 0,
 });
+
+export const antStateCountsFor = (simulation) =>
+  simulation.ants.reduce(
+    (counts, ant) => {
+      const state = antStateFor(simulation, ant);
+      return { ...counts, [state]: counts[state] + 1 };
+    },
+    EMPTY_ANT_STATES,
+  );
+
+export const antViewFor = (simulation, ant) => {
+  const state = antStateFor(simulation, ant);
+  return {
+    id: ant.id,
+    node: ant.node,
+    edge: ant.edge === null ? null : {
+      from: ant.edge.from,
+      to: ant.edge.to,
+      progress: Math.min(1, Math.max(0, Number(ant.edge.progress) || 0)),
+    },
+    state,
+    returning: state === "carrying",
+    exploring: state === "scouting" || state === "frontier",
+    scouting: state === "scouting",
+    frontier: state === "frontier",
+    escaping: state === "escaping",
+  };
+};
 
 const finiteOr = (fallback, value) => Number.isFinite(value) ? value : fallback;
 
-export const metricsViewFor = (simulation, metrics) => ({
-  ...metrics,
-  deliveries: finiteOr(0, metrics.deliveries),
-  discoveries: finiteOr(0, metrics.discoveries),
-  selectedDistance: metrics.selectedDistance ?? metrics.bestDistance ?? null,
-  selectedHops: finiteOr(
-    0,
-    metrics.selectedHops ?? metrics.bestHops,
-  ),
-  efficiency: finiteOr(0, metrics.efficiency),
-  signalFocus: finiteOr(0, metrics.signalFocus),
-  returning: finiteOr(0, metrics.returning),
-  exploring: finiteOr(0, metrics.exploring ?? metrics.scouts),
-  foods: getEngine(simulation.engineId).capabilities.multipleFoods
-    ? finiteOr(activeFoodsFor(simulation).length, metrics.foods)
-    : 1,
-});
+export const metricsViewFor = (simulation, metrics) => {
+  const states = antStateCountsFor(simulation);
+  return {
+    ...metrics,
+    ...states,
+    deliveries: finiteOr(0, metrics.deliveries),
+    discoveries: finiteOr(0, metrics.discoveries),
+    selectedDistance: metrics.selectedDistance ?? metrics.bestDistance ?? null,
+    selectedHops: finiteOr(
+      0,
+      metrics.selectedHops ?? metrics.bestHops,
+    ),
+    efficiency: finiteOr(0, metrics.efficiency),
+    signalFocus: finiteOr(0, metrics.signalFocus),
+    returning: states.carrying,
+    exploring: states.scouting + states.frontier + states.escaping,
+    foods: getEngine(simulation.engineId).capabilities.multipleFoods
+      ? finiteOr(activeFoodsFor(simulation).length, metrics.foods)
+      : 1,
+  };
+};

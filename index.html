@@ -41,7 +41,11 @@
           <div class="legend" aria-label="Visualization legend">
             <span><i class="legend-slow"></i><strong class="persistent-name">Persistent</strong> level</span>
             <span><i class="legend-fast"></i><strong class="food-name">Food</strong> level</span>
+            <span><i class="legend-follow"></i>Trail-following</span>
             <span><i class="legend-explore"></i>Scouting</span>
+            <span><i class="legend-frontier"></i>Frontier-leading</span>
+            <span><i class="legend-escape"></i>Returning empty</span>
+            <span><i class="legend-carry"></i>Carrying food</span>
           </div>
         </div>
 
@@ -69,12 +73,24 @@
               <dd id="runtime">0.0 s</dd>
             </div>
             <div>
-              <dt>Returning</dt>
-              <dd id="returning-count">0</dd>
+              <dt>Trail-following</dt>
+              <dd id="following-count">0</dd>
             </div>
             <div>
-              <dt>Exploring</dt>
-              <dd id="exploring-count">0/0</dd>
+              <dt>Scouting</dt>
+              <dd id="scouting-count">0</dd>
+            </div>
+            <div>
+              <dt>Frontier-leading</dt>
+              <dd id="frontier-count">0</dd>
+            </div>
+            <div>
+              <dt>Returning empty</dt>
+              <dd id="escaping-count">0</dd>
+            </div>
+            <div>
+              <dt>Carrying food</dt>
+              <dd id="carrying-count">0</dd>
             </div>
             <div>
               <dt>Food sources</dt>

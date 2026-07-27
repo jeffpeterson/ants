@@ -340,7 +340,11 @@ const renderMetrics = (current) => {
     deriveMetrics(current.simulation),
   );
   setText("delivery-count", metrics.deliveries);
-  setText("returning-count", metrics.returning);
+  setText("following-count", metrics.following);
+  setText("scouting-count", metrics.scouting);
+  setText("frontier-count", metrics.frontier);
+  setText("escaping-count", metrics.escaping);
+  setText("carrying-count", metrics.carrying);
   setText("best-distance", formatDistance(metrics.selectedDistance));
   setText(
     "best-hops",
@@ -348,10 +352,6 @@ const renderMetrics = (current) => {
   );
   setText("efficiency", formatPercent(metrics.efficiency));
   setText("signal-focus", formatPercent(metrics.signalFocus));
-  setText(
-    "exploring-count",
-    `${metrics.exploring}/${current.simulation.ants.length}`,
-  );
   setText("food-count", metrics.foods);
   setText("stage-status", statusCopy(current, metrics));
   setText("runtime", `${current.simulation.elapsed.toFixed(1)} s`);
@@ -727,9 +727,24 @@ const drawAnt = (view, points) => {
     context.fill();
     context.stroke();
   }
-  if (view.exploring) {
+  if (view.scouting) {
     context.strokeStyle = "#e75b2a";
     context.lineWidth = 1.2;
+    context.beginPath();
+    context.arc(-2, 0, 4.6, 0, Math.PI * 2);
+    context.stroke();
+  }
+  if (view.frontier) {
+    context.strokeStyle = "#e75b2a";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(-2, 0, 5.2, 0, Math.PI * 2);
+    context.stroke();
+  }
+  if (view.escaping) {
+    context.strokeStyle = "#c58b2a";
+    context.lineWidth = 1.2;
+    context.setLineDash([2, 2]);
     context.beginPath();
     context.arc(-2, 0, 4.6, 0, Math.PI * 2);
     context.stroke();
