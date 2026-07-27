@@ -30,9 +30,9 @@ export const CONTROL_HELP = Object.freeze({
   exploreRate:
     "Chance that a normal searching ant switches into random scouting at each junction.",
   stopExploreChance:
-    "Per-second chance that a scout with no local unwalked non-U-turn edge begins following the persistent field home.",
+    "Per-second chance that a scout with no local unwalked or outward non-U-turn edge begins following the persistent field home.",
   backtrackAfter:
-    "Consecutive local choices without an unwalked non-U-turn edge before a scout follows the persistent field home. Zero disables this junction limit.",
+    "Consecutive local choices without an unwalked or outward non-U-turn edge before a scout follows the persistent field home. Zero disables this junction limit; leaf nodes still return.",
   exploreSignalBias:
     "Scout response to the persistent home-field slope: negative moves away from home, zero ignores the slope, and positive moves homeward.",
   unchartedPreference:

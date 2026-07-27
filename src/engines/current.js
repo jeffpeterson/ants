@@ -768,11 +768,16 @@ const foodwardProbabilities = (ant, graph, pheromones, params) =>
     ),
   );
 
-const unwalkedNeighbors = (ant, graph, pheromones) =>
-  graph.adjacency[ant.node].filter((neighbor) =>
+const hasExplorationProgress = (ant, graph, pheromones) => {
+  const here = pheromones.slow[ant.node] ?? 0;
+  return graph.adjacency[ant.node].some((neighbor) =>
     neighbor !== ant.previous &&
-    (pheromones.slowEdges?.[edgeKey(ant.node, neighbor)] ?? 0) <= EPSILON
+    (
+      (pheromones.slowEdges?.[edgeKey(ant.node, neighbor)] ?? 0) <= EPSILON ||
+      (pheromones.slow[neighbor] ?? 0) <= here + EPSILON
+    )
   );
+};
 
 const escapeProbabilities = (ant, graph, pheromones, params) => {
   const neighbors = graph.adjacency[ant.node];
@@ -863,14 +868,17 @@ const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   const continuing = ant.searchState.kind === "explore";
   const starting = !continuing && (!hasFoodward || exploreDraw < params.exploreRate);
   const exploring = continuing || starting;
-  const unwalked = unwalkedNeighbors(ant, graph, pheromones);
-  const blockedChoices = exploring && unwalked.length === 0
-    ? ant.blockedChoices + 1
-    : 0;
+  const progressing = hasExplorationProgress(ant, graph, pheromones);
+  const blockedChoices = exploring && !progressing ? ant.blockedChoices + 1 : 0;
   if (
     exploring &&
-    params.backtrackAfter > 0 &&
-    blockedChoices >= params.backtrackAfter
+    (
+      graph.adjacency[ant.node].every((neighbor) => neighbor === ant.previous) ||
+      (
+        params.backtrackAfter > 0 &&
+        blockedChoices >= params.backtrackAfter
+      )
+    )
   ) {
     return startEscapeEdge(
       { ...ant, blockedChoices },
@@ -1204,7 +1212,7 @@ const maybeStopExploring = (ant, graph, pheromones, params, seed, dt) => {
   if (ant.mode !== "search" || ant.searchState.kind !== "explore") {
     return { ant, seed };
   }
-  if (unwalkedNeighbors(ant, graph, pheromones).length > 0) {
+  if (hasExplorationProgress(ant, graph, pheromones)) {
     return { ant, seed };
   }
   const [random, nextSeed] = nextRandom(seed);

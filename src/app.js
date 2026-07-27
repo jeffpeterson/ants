@@ -529,7 +529,6 @@ const drawArrow = (from, to, intensity, color) => {
 const drawPheromoneEdge = (
   from,
   to,
-  amount,
   fromLevel,
   toLevel,
   {
@@ -541,18 +540,15 @@ const drawPheromoneEdge = (
     dashed = false,
   },
 ) => {
-  const intensity = strength(amount);
+  const fromIntensity = strength(fromLevel);
+  const toIntensity = strength(toLevel);
+  const intensity = Math.max(fromIntensity, toIntensity);
   if (intensity < 0.008) return;
   const [start, end] = offsetArc(from, to, offset);
   const [weaker, stronger] = fromLevel <= toLevel ? [start, end] : [end, start];
-  const gradient = context.createLinearGradient(
-    weaker.x,
-    weaker.y,
-    stronger.x,
-    stronger.y,
-  );
-  gradient.addColorStop(0, faint);
-  gradient.addColorStop(1, strong(intensity));
+  const gradient = context.createLinearGradient(start.x, start.y, end.x, end.y);
+  gradient.addColorStop(0, fromIntensity < 0.008 ? faint : strong(fromIntensity));
+  gradient.addColorStop(1, toIntensity < 0.008 ? faint : strong(toIntensity));
   context.save();
   context.strokeStyle = gradient;
   context.lineWidth = width(intensity);
@@ -589,7 +585,6 @@ const drawTrailSegment = (segment, points) =>
   drawPheromoneEdge(
     points[segment.from],
     points[segment.to],
-    segment.amount,
     segment.fromLevel,
     segment.toLevel,
     trailStyle(segment.channel),

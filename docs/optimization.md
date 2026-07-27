@@ -313,6 +313,11 @@ These predictions are recorded before aggregate benchmarking:
    intermediate probability may adapt better after food moves than unconditional
    joining.
 
+Shared coverage must remain a novelty cue rather than a failure predicate. A first wave
+can chart an edge before the rest of the wave reaches it; treating that collective mark
+as exhaustion makes every following ant retreat. Escape is therefore eligible only when
+no non-U-turn branch is either unwalked or outward/equal in the local home field.
+
 The causal candidates are home-only, home plus escape, home plus food-progress gating,
 home plus both, and cautious/balanced/eager social variants. Promotion requires all
 local invariants to pass, no increase in stranded or no-delivery runs, improved

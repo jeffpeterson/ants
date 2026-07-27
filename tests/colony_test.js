@@ -459,9 +459,9 @@ Deno.test("the blocked-choice threshold starts strictly homeward escape", () => 
     !initial.graph.foods.includes(id) &&
     initial.graph.adjacency[id].length > 1
   ).id;
-  const homeward = initial.graph.adjacency[node][0];
+  const neighbors = new Set(initial.graph.adjacency[node]);
   const slow = Object.fromEntries(
-    initial.graph.nodes.map(({ id }) => [id, id === homeward ? 0.8 : 0.1]),
+    initial.graph.nodes.map(({ id }) => [id, neighbors.has(id) ? 0.8 : 0.1]),
   );
   slow[initial.graph.hill] = 1;
   slow[node] = 0.4;
@@ -492,6 +492,53 @@ Deno.test("the blocked-choice threshold starts strictly homeward escape", () => 
   assert(
     slow[atThreshold.edge.to] > slow[node],
     "Escape must choose a strictly higher home-potential endpoint",
+  );
+});
+
+Deno.test("collective edge coverage does not make outward scouts retreat", () => {
+  const initial = createSimulation({
+    seed: 29,
+    params: {
+      antCount: 8,
+      backtrackAfter: 2,
+      stopExploreChance: 0,
+    },
+  });
+  const node = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    !initial.graph.adjacency[id].includes(initial.graph.hill) &&
+    initial.graph.adjacency[id].length > 1
+  ).id;
+  const slow = Object.fromEntries(
+    initial.graph.nodes.map(({ id }) => [
+      id,
+      id === initial.graph.hill ? 1 : id === node ? 0.4 : 0.2,
+    ]),
+  );
+  const ant = {
+    ...initial.ants[0],
+    node,
+    previous: initial.graph.adjacency[node][0],
+    searchState: { kind: "explore" },
+    blockedChoices: 1,
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      slow,
+      slowEdges: Object.fromEntries(
+        initial.graph.edges.map(({ id }) => [id, 1]),
+      ),
+    },
+    ants: [ant],
+  }, 0.001).ants[0];
+
+  assertEquals(stepped.searchState.kind, "explore");
+  assertEquals(stepped.blockedChoices, 0);
+  assert(
+    slow[stepped.edge.to] <= slow[node],
+    "A covered outward branch must still count as exploration progress",
   );
 });
 

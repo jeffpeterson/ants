@@ -135,7 +135,9 @@ Escape traffic does not refresh persistent coverage.
   write it.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
 - “Unwalked” means an incident edge has no persistent coverage mark; it is not a
-  personal visited set or a graph-wide query.
+  personal visited set or a graph-wide query. Shared coverage is only a novelty cue,
+  never proof of a dead end. A scout is locally blocked only when every non-U-turn
+  branch is both charted and higher in the home field.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
   incident-edge coverage, edge length, mode, a bounded failure count, and seeded
   randomness. It never reads a route, visited set, shortest-path result, or graph-wide
