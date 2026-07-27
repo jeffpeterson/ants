@@ -618,6 +618,37 @@ productive utilization, cycle participation, trail coherence, or signaled homing
 Screening and stress select finalists; validation, fresh confirmation, and browser
 cadence decide promotion.
 
+### Bounded food-potential experiment plan
+
+Compare the additive node field with a bounded food-potential model. A carrier starts
+with potential `1` at food. After traversing an edge of length `d`, its local budget is:
+
+```text
+cap = source × 2 ^ (-d / halfDistance)
+```
+
+The destination node then approaches, but never exceeds, that cap:
+
+```text
+destination' =
+  destination + reinforcement × max(0, cap - destination)
+```
+
+This uses only the carrier's remaining pheromone, edge length, and destination level. It
+stores no route or visited set, cannot create a non-food peak, and bounds the field
+independently of population size.
+
+Test half-distances `0.3`, `0.5`, and `1.0` with reinforcement rates `10%`, `25%`,
+`50%`, and the `100%` Bellman-style control. Cross the best pairs with follower floors
+`0%` and `1%`, then with the deployed and completed scout lifecycles. Begin at
+half-distance `0.5` and reinforcement `25%`.
+
+Before promotion, chain, loop, unequal-route, subdivided-edge, confluence, and
+multiple-food tests must establish the local gradient invariants. Screening and stress
+select finalists; validation, fresh confirmation, and browser cadence must improve
+adaptation and seed floor without adding failures or materially regressing static
+throughput, efficiency, utilization, participation, coherence, or signaled homing.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or
