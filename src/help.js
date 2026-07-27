@@ -10,6 +10,8 @@ export const CONTROL_HELP = Object.freeze({
     "Clear both pheromone fields while leaving ants and endpoints in place.",
   "copy-share-link":
     "Copy a URL containing the current algorithm, graph recipe, hill, and food sources.",
+  simulationRate:
+    "Run the whole simulation clock faster or slower, including movement, pheromone decay, and per-second decisions. This changes only playback rate.",
   antCount:
     "Change the live population. Added ants start at the hill; existing ants and trails remain.",
   speed:

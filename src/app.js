@@ -26,6 +26,7 @@ import {
   presetRef,
   resolveAlgorithmPreset,
 } from "./presets.js";
+import { sanitizeSimulationRate, simulatedSeconds } from "./clock.js";
 
 const byId = (id) => document.getElementById(id);
 
@@ -58,6 +59,7 @@ let model = {
     foods: sharedHash?.map.foods,
   }),
   running: !prefersReducedMotion,
+  simulationRate: 1,
   selectedNode: null,
   movingFood: null,
   notice: "",
@@ -76,6 +78,11 @@ const reduceModel = (current, action) => {
   switch (action.type) {
     case "toggle":
       return { ...current, running: !current.running };
+    case "simulationRate":
+      return {
+        ...current,
+        simulationRate: sanitizeSimulationRate(action.value),
+      };
     case "advance":
       return current.running
         ? {
@@ -861,6 +868,11 @@ byId("foodTrailModel").addEventListener("change", (event) =>
     name: "foodTrailModel",
     value: event.currentTarget.value,
   }));
+byId("simulationRate").addEventListener("change", (event) =>
+  dispatch({
+    type: "simulationRate",
+    value: event.currentTarget.value,
+  }));
 
 const readPresetLibrary = (key) => {
   try {
@@ -1177,7 +1189,9 @@ const fixedStep = 1 / 60;
 const frame = (time) => {
   const frameSeconds = Math.min(0.08, Math.max(0, (time - previousTime) / 1000));
   previousTime = time;
-  accumulator += model.running ? frameSeconds : 0;
+  accumulator += model.running
+    ? simulatedSeconds(frameSeconds, model.simulationRate)
+    : 0;
   while (accumulator >= fixedStep) {
     model = reduceModel(model, { type: "advance", dt: fixedStep });
     accumulator -= fixedStep;

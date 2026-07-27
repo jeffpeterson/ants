@@ -32,7 +32,9 @@ occasional long connections. One map-variation control changes spatial and topol
 irregularity without exposing implementation-shaped island controls. Every map remains
 connected from 8 through 1,200 nodes. Ants move at one physical speed: crossing an edge
 takes `edge.length / speed`, so shorter routes permit more laps and more reinforcement
-per minute.
+per minute. The separate simulation-rate control scales the entire simulation clock,
+including movement, pheromone decay, and per-second decisions, so it changes playback
+speed without changing algorithm behavior.
 
 The colony always stores a scalar persistent level at every node:
 
@@ -118,6 +120,8 @@ count, timer, route, or visited set.
 - The persistent load carried from the hill is one chemical scalar, not a path record.
 - Ant speed is constant in physical graph units. Long edges and routes take
   proportionally longer to traverse.
+- Simulation rate scales the complete clock rather than ant movement alone, preserving
+  the relationship between travel, decay, and stochastic decisions.
 - Every generated map has a minimum spanning backbone, so irregular clusters and
   bottlenecks never become disconnected components.
 - Food edits preserve the running ants and both fields. Old food signal evaporates while
