@@ -1146,7 +1146,10 @@ Deno.test("food signal renders as one thin solid green line", async () => {
   const app = await Deno.readTextFile(new URL("../src/app.js", import.meta.url));
 
   assert(app.includes('color: "#2f9e44"'));
-  assert(app.includes("width: (intensity) => 0.8 + intensity * 2.3"));
+  assertEquals(
+    app.match(/width: \(intensity\) => 0\.5 \+ intensity \* 2\.6/gu)?.length,
+    2,
+  );
   assert(!app.includes("const drawLeadingRoute"));
   assert(!app.includes("drawLeadingRoute(current.simulation"));
   assert(!/color:\s*"#2f9e44"[\s\S]*?dashed:\s*true/u.test(app));
