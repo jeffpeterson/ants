@@ -49,8 +49,12 @@ speed without changing algorithm behavior.
 
 The colony always stores a scalar persistent level at every node:
 
-- The persistent field is extended by searching ants carrying a hill-sourced chemical
-  level that weakens with distance. It fades slowly.
+- The hill is the sole fixed source at level `1`.
+- A searching traversal `u → v` can propose only `persistent[u] × exp(-2 × edge.length)`
+  at `v`.
+- The destination keeps the maximum of its decayed level and that attenuated proposal. A
+  loop therefore cannot amplify itself, and the initial outbound trail already rises
+  toward the hill rather than depending on deposit freshness.
 
 Food pheromone is deposited only by an ant that has picked up food. A playground lever
 stores it either as scalar node levels or on undirected edges; both live fields are
@@ -105,11 +109,10 @@ avoids reinforcing a mistaken food-marked branch during return.
 
 Every ant starts in scouting mode. Later, an independent enter-scouting chance can
 switch a follower back into it. When any adjacent endpoint has zero persistent signal,
-the default scout chooses randomly among only those uncharted options. Uncharted
-priority can soften that exclusion. Once all adjacent endpoints are charted, the scout
-chooses randomly by default; an optional signed bias can instead avoid or seek the
-persistent field. The U-turn weight remains the only default modifier within either
-tier.
+the default scout chooses among those uncharted options. Uncharted priority can soften
+that exclusion. Scouts otherwise descend the endpoint-derived persistent slope by
+default, so exploration tends away from the hill while homing climbs the same field. The
+U-turn weight remains the only default modifier within either tier.
 
 On every simulation update a scout has an adjustable per-second chance to stop scouting.
 This memoryless exit rule is stable across animation frame rates and stores no step
@@ -120,6 +123,8 @@ count, timer, route, or visited set.
 - Persistent pheromone is one scalar per node. Food pheromone is either one scalar per
   node or per undirected edge, never a stored direction. Renderer arrows exist only for
   endpoint-derived node slopes.
+- The hill is pinned to `1`; every accepted non-hill persistent write is attenuated from
+  the live level at the edge's other endpoint. Persistent traffic is never additive.
 - Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
   do.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
@@ -128,7 +133,6 @@ count, timer, route, or visited set.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
   edge length, mode, and seeded randomness. It never reads a route, visited set,
   shortest-path result, or graph-wide statistic.
-- The persistent load carried from the hill is one chemical scalar, not a path record.
 - Ant speed is constant in physical graph units. Long edges and routes take
   proportionally longer to traverse.
 - Simulation rate scales the complete clock rather than ant movement alone, preserving

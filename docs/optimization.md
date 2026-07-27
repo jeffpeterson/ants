@@ -291,6 +291,34 @@ The current overrides relative to the first promoted preset are:
 | Homebound food pull       |          `1.10` |       0 |
 | Homebound food polarity   | `1.40×` descend |  ignore |
 
+## Hill-potential and local-interaction hypotheses
+
+The next iteration changes the information model before retuning its numeric controls.
+These predictions are recorded before aggregate benchmarking:
+
+1. Pinning the hill at `1` and accepting only attenuated destination improvements will
+   eliminate persistent local maxima and prevent short loops from amplifying the home
+   field.
+2. Increasing the persistent half-life by roughly two orders of magnitude over the food
+   half-life will improve sparse-field homing without preserving stale food routes.
+3. Persistent edge coverage plus finite escape-to-hill will reduce time spent in
+   cul-de-sacs; a threshold near two locally exhausted choices should balance coverage
+   and premature returns.
+4. Food deposition accepted only on strictly homeward persistent-field moves will
+   eliminate food mass laid by lost carriers and improve trail focus.
+5. A moderate response to approaching opposite-direction traffic will improve early
+   discovery and short-route adoption most when the chemical field is sparse; zero and
+   very strong social response should perform worse.
+6. A scout that encounters usable food signal should usually rejoin following, but an
+   intermediate probability may adapt better after food moves than unconditional
+   joining.
+
+The causal candidates are hill-only, hill plus escape, hill plus food-progress gating,
+hill plus both, and cautious/balanced/eager social variants. Promotion requires all
+local invariants to pass, no increase in stranded or no-delivery runs, improved
+homebound progress, and better paired cycle efficiency on held-out maps. Aggregate score
+remains secondary to those mechanism-specific checks.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:

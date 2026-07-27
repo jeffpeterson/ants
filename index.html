@@ -200,9 +200,9 @@
                 value="8.3">
             </label>
             <label class="slider-row signal-persistent" for="exploreSignalBias">
-              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">ignore</output></span>
+              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="exploreSignalBias-value">2× descend</output></span>
               <input id="exploreSignalBias" type="range" min="-40" max="40" step="0.1"
-                value="0">
+                value="-20">
             </label>
             <label class="slider-row signal-persistent" for="unchartedPreference">
               <span>Uncharted priority <output id="unchartedPreference-value">75%</output></span>
@@ -299,9 +299,9 @@
               </select>
             </label>
             <label class="slider-row signal-persistent" for="slowHalfLife">
-              <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">22.2 s</output></span>
-              <input id="slowHalfLife" type="range" min="5" max="120" step="0.1"
-                value="22.2">
+              <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">1 h</output></span>
+              <input id="slowHalfLife" type="range" min="5" max="86400" step="5"
+                value="3600">
             </label>
             <label class="slider-row signal-food" for="fastHalfLife">
               <span><span><strong class="food-name">Food</strong> half-life</span> <output id="fastHalfLife-value">14.4 s</output></span>

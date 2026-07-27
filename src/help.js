@@ -32,7 +32,7 @@ export const CONTROL_HELP = Object.freeze({
   stopExploreChance:
     "Per-second chance that a scouting ant returns to normal trail following; independent of frame rate.",
   exploreSignalBias:
-    "After every adjacent branch is charted, bias scouts by persistent signal at the opposite endpoint: negative avoids it, zero chooses randomly, positive seeks it.",
+    "Scout response to the persistent hill-field slope: negative descends away from home, zero ignores the slope, and positive climbs homeward.",
   unchartedPreference:
     "Reduce the weight of charted branches when a zero-coverage endpoint is locally available. At 100%, scouts choose only among uncharted options.",
   reversePenalty:
@@ -57,7 +57,8 @@ export const CONTROL_HELP = Object.freeze({
     "Homebound response to food-signal slope: negative descends it, zero ignores slope, positive climbs it.",
   returnSlowPolarity:
     "Homebound response to persistent-signal slope: negative descends it, zero ignores slope, positive climbs it.",
-  slowHalfLife: "Seconds for an unreinforced persistent-signal level to decay by half.",
+  slowHalfLife:
+    "Seconds for an unreinforced persistent hill-field level to decay by half; long values preserve the colony’s shared map.",
   fastHalfLife: "Seconds for an unreinforced food-signal level to decay by half.",
   nodeCount: "Number of nodes to create on the next generated or loaded-seed graph.",
   density:

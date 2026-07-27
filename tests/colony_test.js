@@ -145,6 +145,109 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
   );
 });
 
+Deno.test("the hill remains the sole anchored persistent source", () => {
+  const initial = createSimulation({ seed: 19 });
+  const faded = {
+    ...initial,
+    ants: [],
+    pheromones: {
+      ...initial.pheromones,
+      slow: { ...initial.pheromones.slow, [initial.graph.hill]: 0.25 },
+    },
+  };
+  const stepped = stepSimulation(faded, 0.25);
+
+  assertEquals(stepped.pheromones.slow[stepped.graph.hill], 1);
+  assert(
+    stepped.graph.nodes
+      .filter(({ id }) => id !== stepped.graph.hill)
+      .every(({ id }) => stepped.pheromones.slow[id] === 0),
+  );
+});
+
+Deno.test("the first outbound trail is already uphill toward the hill", () => {
+  let state = createSimulation({
+    seed: 19,
+    params: { antCount: 8, speed: 0.65 },
+  });
+  for (
+    let step = 0;
+    step < 20 &&
+    Object.entries(state.pheromones.slow).every(([node, value]) =>
+      Number(node) === state.graph.hill || value === 0
+    );
+    step += 1
+  ) {
+    state = stepSimulation(state, 0.25);
+  }
+
+  const marked = state.graph.nodes.filter(({ id }) =>
+    id !== state.graph.hill && state.pheromones.slow[id] > 0
+  );
+  assert(marked.length > 0);
+  marked.forEach(({ id }) =>
+    assert(
+      state.graph.adjacency[id].some((neighbor) =>
+        state.pheromones.slow[neighbor] > state.pheromones.slow[id]
+      ),
+      `Node ${id} lacks an uphill neighbor`,
+    )
+  );
+});
+
+Deno.test("stale carried values cannot inject persistent signal", () => {
+  const initial = createSimulation({ seed: 23, params: { antCount: 8 } });
+  const edge = initial.graph.edges.find(({ a, b }) =>
+    ![a, b].includes(initial.graph.hill) &&
+    ![a, b].some((node) => initial.graph.foods.includes(node))
+  );
+  assert(edge);
+  const ant = {
+    ...initial.ants[0],
+    node: edge.a,
+    homeLevel: 1_000,
+    edge: {
+      from: edge.a,
+      to: edge.b,
+      length: edge.length,
+      progress: 0.999,
+      homeFrom: 1_000,
+      homeTo: 999,
+      exploring: true,
+    },
+  };
+  const state = {
+    ...initial,
+    ants: [ant],
+  };
+  const stepped = stepSimulation(state, 0.01);
+
+  assertEquals(stepped.pheromones.slow[edge.a], 0);
+  assertEquals(stepped.pheromones.slow[edge.b], 0);
+  assertEquals(stepped.pheromones.slow[stepped.graph.hill], 1);
+});
+
+Deno.test("every persistent mark retains a strictly uphill neighbor", () => {
+  let state = createSimulation({
+    seed: 93,
+    params: { antCount: 48, speed: 0.65 },
+  });
+  for (let step = 0; step < 240; step += 1) {
+    state = stepSimulation(state, 0.25);
+    state.graph.nodes
+      .filter(({ id }) => id !== state.graph.hill && state.pheromones.slow[id] > 1e-8)
+      .forEach(({ id }) =>
+        assert(
+          state.graph.adjacency[id].some((neighbor) =>
+            state.pheromones.slow[neighbor] >
+              state.pheromones.slow[id] + 1e-12
+          ),
+          `Node ${id} became a persistent local maximum at step ${step}`,
+        )
+      );
+  }
+});
+
 Deno.test("a branch reads the signal at its opposite node", () => {
   const pheromones = {
     slow: { 0: 0, 1: 0, 2: 0 },
@@ -262,7 +365,7 @@ Deno.test("scouts prefer uncharted endpoints before charted branches", () => {
 
 Deno.test("charted scout fallback can avoid, ignore, or seek persistent signal", () => {
   const pheromones = {
-    slow: { 0: 0, 1: 0.1, 2: 1 },
+    slow: { 0: 0.2, 1: 0.1, 2: 1 },
     fast: { 0: 0, 1: 0, 2: 0 },
   };
   const choices = (bias, previous = null) =>

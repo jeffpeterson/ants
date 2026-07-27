@@ -802,13 +802,14 @@ const polarityLabel = (value) => {
   return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "descend" : "climb"}`;
 };
 
-const signalBiasLabel = (value) => {
-  const scaled = Number(value) / 10;
-  if (scaled === 0) return "ignore";
-  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "avoid" : "seek"}`;
-};
-
 const influenceLabel = (value) => `${conciseNumber(Number(value) / 10)}×`;
+
+const durationLabel = (value) => {
+  const seconds = Number(value);
+  if (seconds < 60) return `${conciseNumber(seconds)} s`;
+  if (seconds < 3_600) return `${conciseNumber(seconds / 60)} min`;
+  return `${conciseNumber(seconds / 3_600)} h`;
+};
 
 const sliderConfigs = [
   ["antCount", Number, (value) => `${value}`, (value) => value],
@@ -827,7 +828,7 @@ const sliderConfigs = [
   [
     "exploreSignalBias",
     (value) => Number(value) / 10,
-    signalBiasLabel,
+    polarityLabel,
     (value) => value * 10,
   ],
   [
@@ -902,7 +903,7 @@ const sliderConfigs = [
     polarityLabel,
     (value) => value * 10,
   ],
-  ["slowHalfLife", Number, (value) => `${value} s`, (value) => value],
+  ["slowHalfLife", Number, durationLabel, (value) => value],
   ["fastHalfLife", Number, (value) => `${value} s`, (value) => value],
   ["nodeCount", Number, (value) => `${value}`, (value) => value],
   [

@@ -6,7 +6,7 @@ export const DEFAULTS = Object.freeze({
   exploreRate: 0.007,
   stopExploreChance: 0.083,
   speed: 0.17,
-  slowHalfLife: 22.2,
+  slowHalfLife: 3_600,
   fastHalfLife: 14.4,
   fastInfluence: 4.56,
   outboundPolarity: 0.78,
@@ -14,7 +14,7 @@ export const DEFAULTS = Object.freeze({
   returnSlowInfluence: 3.09,
   returnFastPolarity: 0,
   returnSlowPolarity: 4,
-  exploreSignalBias: 0,
+  exploreSignalBias: -2,
   unchartedPreference: 0.75,
   choiceFloor: 0,
   foodTrailModel: "node",
@@ -59,7 +59,11 @@ export const sanitizeParams = (values = {}) => ({
     finiteOr(DEFAULTS.stopExploreChance, values.stopExploreChance),
   ),
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
-  slowHalfLife: clamp(5, 120, finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife)),
+  slowHalfLife: clamp(
+    5,
+    86_400,
+    finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife),
+  ),
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
   exploreSignalBias: clamp(
     -4,
@@ -451,7 +455,6 @@ const makeAnt = (id, hill) => ({
   mode: "search",
   previous: null,
   tripDistance: 0,
-  homeLevel: 1,
   turnAround: null,
   searchState: { kind: "explore" },
   exploreChoices: 0,
@@ -538,6 +541,11 @@ export const decayPheromones = (pheromones, params, dt) => ({
   slow: decayField(pheromones.slow, params.slowHalfLife, dt),
   fast: decayField(pheromones.fast, params.fastHalfLife, dt),
   fastEdges: decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
+});
+
+const anchorHill = (pheromones, hill) => ({
+  ...pheromones,
+  slow: { ...pheromones.slow, [hill]: 1 },
 });
 
 export const trailGradient = (field, edge) =>
@@ -653,13 +661,13 @@ export const choiceProbabilities = (
   }
 
   const slowAt = (neighbor) => pheromones.slow[neighbor] ?? 0;
-  const maximum = Math.max(EPSILON, ...neighbors.map(slowAt));
   const hasUncharted = neighbors.some((neighbor) => slowAt(neighbor) <= EPSILON);
   return normalizeChoices(
     neighbors.map((neighbor) => ({
       node: neighbor,
       weight: Math.exp(
-        params.exploreSignalBias * slowAt(neighbor) / maximum,
+        params.exploreSignalBias *
+          relativeGradient(pheromones.slow, node, neighbor),
       ) * (neighbor === discouragedNode ? params.reversePenalty : 1) *
         (
           hasUncharted && slowAt(neighbor) > EPSILON
@@ -709,7 +717,8 @@ const headingBiasFrom = (graph, node, previous, influence) => {
   };
 };
 
-const attenuateHome = (level, length) => level * Math.exp(-HOME_ATTENUATION * length);
+export const attenuateHome = (level, length) =>
+  level * Math.exp(-HOME_ATTENUATION * length);
 
 const movementEdge = (ant, graph, to, extra = {}) => {
   const length = graph.edgeById[edgeKey(ant.node, to)].length;
@@ -718,8 +727,6 @@ const movementEdge = (ant, graph, to, extra = {}) => {
     to,
     progress: 0,
     length,
-    homeFrom: ant.homeLevel,
-    homeTo: attenuateHome(ant.homeLevel, length),
     ...extra,
   };
 };
@@ -885,7 +892,6 @@ const arriveSearching = (ant, graph) => {
     edge: null,
     previous: atHill ? null : ant.edge.from,
     tripDistance: atHill ? 0 : ant.tripDistance + ant.edge.length,
-    homeLevel: atHill ? 1 : ant.edge.homeTo,
     searchState: atHill ? { kind: "follow" } : ant.searchState,
   };
   return graph.foods.includes(ant.edge.to)
@@ -902,7 +908,6 @@ const arriveReturning = (ant, graph) => {
     edge: null,
     previous: ant.edge.from,
     tripDistance,
-    homeLevel: atHill ? 1 : ant.edge.homeTo,
   };
 
   return atHill
@@ -913,7 +918,6 @@ const arriveReturning = (ant, graph) => {
         previous: null,
         searchState: { kind: "follow" },
         tripDistance: 0,
-        homeLevel: 1,
         turnAround: null,
         trips: ant.trips + 1,
       },
@@ -927,19 +931,14 @@ const arriveReturning = (ant, graph) => {
     : { ant: arrived, events: [], deposits: [] };
 };
 
-const arrive = (ant, graph, params) => {
+const arrive = (ant, graph, pheromones, params) => {
   const returning = ant.mode === "return";
+  const source = pheromones.slow[ant.edge.from] ?? 0;
   const slowDeposits = returning ? [] : [
     {
       channel: "slow",
-      target: ant.edge.from,
-      amount: ant.edge.homeFrom,
-      combine: "max",
-    },
-    {
-      channel: "slow",
       target: ant.edge.to,
-      amount: ant.edge.homeTo,
+      amount: attenuateHome(source, ant.edge.length),
       combine: "max",
     },
   ];
@@ -1032,7 +1031,7 @@ const advanceAnt = (
   }
 
   const secondsUsed = distanceRemaining / params.speed;
-  const arrival = arrive(movingAnt, graph, params);
+  const arrival = arrive(movingAnt, graph, pheromones, params);
   const continued = advanceAnt(
     arrival.ant,
     graph,
@@ -1107,7 +1106,10 @@ const maybeStopExploring = (ant, params, seed, dt) => {
 export const stepSimulation = (state, seconds) => {
   const dt = clamp(0, 0.25, finiteOr(0, seconds));
   if (dt === 0) return state;
-  const decayed = decayPheromones(state.pheromones, state.params, dt);
+  const decayed = anchorHill(
+    decayPheromones(state.pheromones, state.params, dt),
+    state.graph.hill,
+  );
   const advanced = state.ants
     .toSorted((first, second) => first.id - second.id)
     .reduce(
