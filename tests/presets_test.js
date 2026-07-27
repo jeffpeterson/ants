@@ -41,9 +41,9 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
   const joinChance = (id) =>
     BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
       ?.params.trailJoinChance;
-  assertEquals(joinChance("balanced-node"), 0.06);
+  assertEquals(joinChance("balanced-node"), 0.25);
   assertEquals(joinChance("persistent-scouting"), 0);
-  assertEquals(joinChance("steady-food"), 0.07);
+  assertEquals(joinChance("steady-food"), 0.06);
   assertEquals(joinChance("adaptive-edge"), 0);
   assertEquals(joinChance("legacy"), 0);
 });

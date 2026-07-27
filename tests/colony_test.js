@@ -628,7 +628,7 @@ Deno.test("choosing an unwalked edge arms the scout frontier", () => {
 });
 
 Deno.test("scouts can rejoin a locally usable food trail", () => {
-  const resultFor = (trailJoinChance) => {
+  const resultFor = (trailJoinChance, signaled = true) => {
     const initial = createSimulation({
       seed: 43,
       params: {
@@ -659,10 +659,10 @@ Deno.test("scouts can rejoin a locally usable food trail", () => {
         ...initial,
         pheromones: {
           ...initial.pheromones,
-          fast: { ...initial.pheromones.fast, [target]: 1 },
+          fast: { ...initial.pheromones.fast, [target]: Number(signaled) },
           fastEdges: {
             ...initial.pheromones.fastEdges,
-            [edgeKey(node, target)]: 1,
+            [edgeKey(node, target)]: Number(signaled),
           },
           slowEdges: Object.fromEntries(
             initial.graph.edges.map(({ id }) => [id, 1]),
@@ -680,6 +680,8 @@ Deno.test("scouts can rejoin a locally usable food trail", () => {
   const joining = resultFor(1);
   assertEquals(joining.ant.searchState, { kind: "follow" });
   assertEquals(joining.ant.edge.to, joining.target);
+
+  assertEquals(resultFor(1, false).ant.searchState.kind, "explore");
 });
 
 Deno.test("escape ends and resets only at home", () => {

@@ -219,12 +219,12 @@ held-out validation.
 On the current engine, moving, adding, or removing food preserves ants, elapsed time,
 and both pheromone fields. Returning ants finish trips from retired sources while old
 signals evaporate. The default balanced node-trail algorithm was selected by the
-reproducible evaluator. Built-in presets retain that configuration, no-recruitment and
-steady-food controls, an adaptive edge-trail candidate, and the pre-optimization
-baseline. Personal algorithm presets and map presets remain separate in browser storage.
-Loading a preset for the active engine preserves live ants and trails; loading a preset
-for another engine performs the same graph-preserving colony reset as the engine
-selector.
+reproducible evaluator and a steady-state population audit. Built-in presets retain that
+configuration, no-recruitment and cautious-recruitment controls, an adaptive edge-trail
+candidate, and the pre-optimization baseline. Personal algorithm presets and map presets
+remain separate in browser storage. Loading a preset for the active engine preserves
+live ants and trails; loading a preset for another engine performs the same
+graph-preserving colony reset as the engine selector.
 
 The active engine, its parameters, deterministic map recipe, home, and food locations
 are also encoded in the URL hash for reproducible sharing. All simulation functions

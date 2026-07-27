@@ -30,7 +30,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
   builtIn(
     "balanced-node",
     "Balanced node trails",
-    "Validated default: scouts sometimes join local food trails while retaining strong relocation adaptation.",
+    "Majority-following default: repeated local encounters recruit scouts while a minority keeps exploring.",
   ),
   builtIn(
     "persistent-scouting",
@@ -42,10 +42,10 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
   ),
   builtIn(
     "steady-food",
-    "Steady-food recruitment",
-    "Slightly faster stable-route traffic with a small relocation tradeoff.",
+    "Cautious recruitment",
+    "Retains more active scouts for volatile food at the cost of stable-route traffic.",
     {
-      trailJoinChance: 0.07,
+      trailJoinChance: 0.06,
     },
   ),
   builtIn(

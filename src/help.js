@@ -36,7 +36,7 @@ export const CONTROL_HELP = Object.freeze({
   unchartedPreference:
     "Reduce the weight of walked edges when a locally unwalked edge is available. At 100%, scouts choose only among unwalked options.",
   trailJoinChance:
-    "Chance that a scout encountering usable local food pheromone leaves scouting and follows the signaled branch.",
+    "Chance per junction encounter that a scout seeing usable local food pheromone leaves scouting and follows the signaled branch. Repeated encounters provide repeated chances.",
   reversePenalty:
     "Weight for immediately reversing onto the previous node. Lower values discourage one-edge backtracking.",
   headingInfluence:

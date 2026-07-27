@@ -49,16 +49,27 @@ const isEngineAlgorithm = (value) =>
   value.engineId !== "" &&
   isRecord(value.params);
 
+const migrateParams = (engineId, params) =>
+  engineId === CURRENT_ENGINE_ID && !Object.hasOwn(params, "trailJoinChance")
+    ? { ...params, trailJoinChance: 0 }
+    : params;
+
 export const migrateAlgorithmPreset = (value) => {
   if (!isRecord(value)) return null;
   const tagged = Object.hasOwn(value, "engineId") ||
     Object.hasOwn(value, "params");
   if (tagged) {
     return isEngineAlgorithm(value)
-      ? { engineId: value.engineId, params: value.params }
+      ? {
+        engineId: value.engineId,
+        params: migrateParams(value.engineId, value.params),
+      }
       : null;
   }
-  return { engineId: CURRENT_ENGINE_ID, params: value };
+  return {
+    engineId: CURRENT_ENGINE_ID,
+    params: migrateParams(CURRENT_ENGINE_ID, value),
+  };
 };
 
 export const migrateAlgorithmPresetLibrary = (value) =>
@@ -119,12 +130,10 @@ export const migrateConfiguration = (configuration) => {
   if (configuration.version !== 2 || !isEngineAlgorithm(configuration.algorithm)) {
     return null;
   }
+  const algorithm = migrateAlgorithmPreset(configuration.algorithm);
   return {
     ...configuration,
-    algorithm: {
-      engineId: configuration.algorithm.engineId,
-      params: configuration.algorithm.params,
-    },
+    algorithm,
   };
 };
 

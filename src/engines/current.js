@@ -17,7 +17,7 @@ export const DEFAULTS = Object.freeze({
   homewardPreference: 1,
   exploreSignalBias: -2,
   unchartedPreference: 0.75,
-  trailJoinChance: 0.06,
+  trailJoinChance: 0.25,
   choiceFloor: 0,
   foodTrailModel: "node",
   headingInfluence: 1.58,

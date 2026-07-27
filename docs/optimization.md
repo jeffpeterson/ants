@@ -394,8 +394,21 @@ produced the best aggregate result without a relocation failure:
 At browser cadence on six screening scenarios, `6%` scored `77.36` versus `70.10` for
 zero recruitment, while `7%` scored `77.42`. A fresh 24-map confirmation suite then
 scored `56.62`, `67.86`, and `64.98` for `0%`, `6%`, and `7%`, respectively, with no
-failures. The default therefore uses `6%`; `7%` remains the steady-food preset and `0%`
-remains the causal control. Reproduce a row with:
+failures. This initially promoted `6%`, but a visual mechanism audit rejected treating
+the per-encounter probability as though it were the eventual follower fraction. Repeated
+encounters accumulate: after `n` usable encounters the probability of having joined is
+`1 - (1 - p)^n`.
+
+At 80 seconds on 12 varied maps, `6%` left an average of `14.2` ants scouting, `30.6`
+following, and `19.3` carrying, with `95` deliveries. Raising the local hazard to `25%`
+left `6.3` scouting or frontier ants, `35` following, and `22.8` carrying, with `126.2`
+deliveries. Higher rates barely reduced the residual scouts because those ants had not
+encountered a usable trail. The default therefore uses `25%` to express
+majority-following behavior; `6%` remains the cautious-recruitment preset and `0%`
+remains the causal control. Finite-food experiments must recheck the relocation tradeoff
+rather than hiding it in an aggregate score. Older URLs and saved algorithms that
+predate this lever migrate to `0%`; explicitly saved values remain unchanged. Reproduce
+an evaluator row with:
 
 ```sh
 deno task evaluate -- \
