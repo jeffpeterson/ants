@@ -17,11 +17,12 @@ export const CONTROL_HELP = Object.freeze({
   "algorithm-preset-name": "Name the current collection of ant-decision settings.",
   "save-algorithm-preset":
     "Save only the ant-decision settings under the entered name in this browser.",
-  "algorithm-presets": "Choose a saved ant-decision configuration.",
+  "algorithm-presets":
+    "Choose a tested built-in algorithm or an ant-decision configuration saved in this browser.",
   "load-algorithm-preset":
-    "Apply the selected ant settings without resetting the graph, ants, or trails.",
+    "Apply the selected built-in or saved ant settings without resetting the graph, ants, or trails.",
   "delete-algorithm-preset":
-    "Delete the selected ant-settings preset from this browser.",
+    "Delete the selected personal ant-settings preset; built-in presets are immutable.",
   exploreRate:
     "Chance that a normal searching ant switches into random scouting at each junction.",
   stopExploreChance:

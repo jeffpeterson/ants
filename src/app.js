@@ -20,6 +20,12 @@ import {
   sharedConfiguration,
 } from "./config.js";
 import { CONTROL_HELP } from "./help.js";
+import {
+  BUILT_IN_ALGORITHM_PRESETS,
+  parsePresetRef,
+  presetRef,
+  resolveAlgorithmPreset,
+} from "./presets.js";
 
 const byId = (id) => document.getElementById(id);
 
@@ -693,17 +699,21 @@ bindButton("move-food", () => ({ type: "beginFoodMove" }));
 bindButton("remove-food", () => ({ type: "removeFood" }));
 bindButton("cancel-food-move", () => ({ type: "cancelFoodMove" }));
 
+const conciseNumber = (value) => Number(Number(value).toFixed(2)).toString();
+
 const polarityLabel = (value) => {
   const scaled = Number(value) / 10;
   if (scaled === 0) return "ignore";
-  return `${Math.abs(scaled).toFixed(1)}× ${scaled < 0 ? "descend" : "climb"}`;
+  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "descend" : "climb"}`;
 };
 
 const signalBiasLabel = (value) => {
   const scaled = Number(value) / 10;
   if (scaled === 0) return "ignore";
-  return `${Math.abs(scaled).toFixed(1)}× ${scaled < 0 ? "avoid" : "seek"}`;
+  return `${conciseNumber(Math.abs(scaled))}× ${scaled < 0 ? "avoid" : "seek"}`;
 };
+
+const influenceLabel = (value) => `${conciseNumber(Number(value) / 10)}×`;
 
 const sliderConfigs = [
   ["antCount", Number, (value) => `${value}`, (value) => value],
@@ -740,13 +750,13 @@ const sliderConfigs = [
   [
     "headingInfluence",
     (value) => Number(value) / 10,
-    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    influenceLabel,
     (value) => value * 10,
   ],
   [
     "distanceInfluence",
     (value) => Number(value) / 10,
-    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    influenceLabel,
     (value) => value * 10,
   ],
   [
@@ -758,7 +768,7 @@ const sliderConfigs = [
   [
     "fastInfluence",
     (value) => Number(value) / 10,
-    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    influenceLabel,
     (value) => value * 10,
   ],
   [
@@ -770,13 +780,13 @@ const sliderConfigs = [
   [
     "returnFastInfluence",
     (value) => Number(value) / 10,
-    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    influenceLabel,
     (value) => value * 10,
   ],
   [
     "returnSlowInfluence",
     (value) => Number(value) / 10,
-    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    influenceLabel,
     (value) => value * 10,
   ],
   [
@@ -849,7 +859,18 @@ byId("foodTrailModel").addEventListener("change", (event) =>
 const readPresetLibrary = (key) => {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
-    return parsed !== null && typeof parsed === "object" ? parsed : {};
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) =>
+        value !== null && typeof value === "object" && !Array.isArray(value)
+      ),
+    );
   } catch {
     return {};
   }
@@ -864,6 +885,68 @@ const ALGORITHM_PRESET_KEY = "formic.algorithm-presets.v1";
 const MAP_PRESET_KEY = "formic.map-presets.v1";
 let algorithmPresets = readPresetLibrary(ALGORITHM_PRESET_KEY);
 let mapPresets = readPresetLibrary(MAP_PRESET_KEY);
+
+const selectedAlgorithmPreset = () => {
+  const value = byId("algorithm-presets").value;
+  const reference = parsePresetRef(value);
+  const preset = resolveAlgorithmPreset(value, algorithmPresets);
+  return reference === null || preset === null ? null : { ...reference, ...preset };
+};
+
+const syncAlgorithmPresetActions = () => {
+  const selection = selectedAlgorithmPreset();
+  byId("load-algorithm-preset").disabled = selection === null;
+  byId("delete-algorithm-preset").disabled = selection?.source !== "user";
+};
+
+const presetOption = (preset, value) => {
+  const option = new Option(preset.name, value);
+  option.title = preset.description;
+  return option;
+};
+
+const renderAlgorithmPresetOptions = (selected = "") => {
+  const select = byId("algorithm-presets");
+  const placeholder = new Option("Choose an algorithm…", "");
+  placeholder.disabled = true;
+
+  const builtIns = document.createElement("optgroup");
+  builtIns.label = "Built in";
+  builtIns.append(
+    ...BUILT_IN_ALGORITHM_PRESETS.map((preset) =>
+      presetOption(preset, presetRef("builtin", preset.id))
+    ),
+  );
+
+  const userNames = Object.keys(algorithmPresets).toSorted((left, right) =>
+    left.localeCompare(right)
+  );
+  const user = document.createElement("optgroup");
+  user.label = "Your presets";
+  user.append(
+    ...userNames.map((name) =>
+      presetOption(
+        {
+          name,
+          description: "Saved in this browser.",
+        },
+        presetRef("user", name),
+      )
+    ),
+  );
+
+  const available = new Set([
+    ...BUILT_IN_ALGORITHM_PRESETS.map(({ id }) => presetRef("builtin", id)),
+    ...userNames.map((name) => presetRef("user", name)),
+  ]);
+  select.replaceChildren(
+    placeholder,
+    builtIns,
+    ...(userNames.length === 0 ? [] : [user]),
+  );
+  select.value = available.has(selected) ? selected : "";
+  syncAlgorithmPresetActions();
+};
 
 const renderPresetOptions = (id, library, emptyLabel, selected = "") => {
   const select = byId(id);
@@ -920,43 +1003,65 @@ const deleteNamedPreset = ({
   return next;
 };
 
-renderPresetOptions(
-  "algorithm-presets",
-  algorithmPresets,
-  "No saved algorithms",
-);
+renderAlgorithmPresetOptions();
 renderPresetOptions("map-presets", mapPresets, "No saved maps");
 
 byId("save-algorithm-preset").addEventListener("click", () => {
-  algorithmPresets = saveNamedPreset({
-    inputId: "algorithm-preset-name",
-    selectId: "algorithm-presets",
-    storageKey: ALGORITHM_PRESET_KEY,
-    library: algorithmPresets,
-    value: algorithmPreset(model.simulation),
-    emptyLabel: "No saved algorithms",
+  const input = byId("algorithm-preset-name");
+  const name = input.value.trim();
+  if (name === "") {
+    dispatch({ type: "notice", notice: "Give the preset a name first." });
+    input.focus();
+    return;
+  }
+  if (
+    Object.hasOwn(algorithmPresets, name) &&
+    !confirm(`Replace “${name}”?`)
+  ) {
+    return;
+  }
+  algorithmPresets = writePresetLibrary(ALGORITHM_PRESET_KEY, {
+    ...algorithmPresets,
+    [name]: algorithmPreset(model.simulation),
   });
+  renderAlgorithmPresetOptions(presetRef("user", name));
+  input.value = "";
+  dispatch({ type: "notice", notice: `Saved “${name}”.` });
 });
 
 byId("load-algorithm-preset").addEventListener("click", () => {
-  const name = byId("algorithm-presets").value;
-  if (name !== "") {
+  const selection = selectedAlgorithmPreset();
+  if (selection !== null) {
     dispatch({
       type: "algorithmPreset",
-      name,
-      params: algorithmPresets[name],
+      name: selection.name,
+      params: selection.params,
     });
   }
 });
 
 byId("delete-algorithm-preset").addEventListener("click", () => {
-  algorithmPresets = deleteNamedPreset({
-    selectId: "algorithm-presets",
-    storageKey: ALGORITHM_PRESET_KEY,
-    library: algorithmPresets,
-    emptyLabel: "No saved algorithms",
-  });
+  const selection = selectedAlgorithmPreset();
+  if (selection === null) return;
+  if (selection.source !== "user") {
+    dispatch({ type: "notice", notice: "Built-in presets cannot be deleted." });
+    return;
+  }
+  if (!confirm(`Delete “${selection.name}”?`)) return;
+  algorithmPresets = writePresetLibrary(
+    ALGORITHM_PRESET_KEY,
+    Object.fromEntries(
+      Object.entries(algorithmPresets).filter(([name]) => name !== selection.key),
+    ),
+  );
+  renderAlgorithmPresetOptions();
+  dispatch({ type: "notice", notice: `Deleted “${selection.name}”.` });
 });
+
+byId("algorithm-presets").addEventListener(
+  "change",
+  syncAlgorithmPresetActions,
+);
 
 byId("save-map-preset").addEventListener("click", () => {
   mapPresets = saveNamedPreset({

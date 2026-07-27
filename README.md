@@ -147,7 +147,12 @@ held-out validation.
 
 Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
 fields. Returning ants finish trips from retired sources while old signals evaporate.
-Algorithm presets and map presets are stored separately in browser storage. The active
-algorithm, deterministic map recipe, hill, and food locations are also encoded in the
-URL hash for reproducible sharing. All simulation functions return new state, seeded
-randomness is threaded through each transition, and the renderer only reads snapshots.
+The default balanced node-trail algorithm was selected by the reproducible evaluator.
+Built-in presets retain that configuration, an adaptive edge-trail candidate, and the
+pre-optimization baseline. Personal algorithm presets and map presets remain separate in
+browser storage. Loading any algorithm preserves the live ants and trails.
+
+The active algorithm, deterministic map recipe, hill, and food locations are also
+encoded in the URL hash for reproducible sharing. All simulation functions return new
+state, seeded randomness is threaded through each transition, and the renderer only
+reads snapshots.

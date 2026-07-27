@@ -153,13 +153,13 @@
                 type="button">Save</button>
             </div>
             <div class="preset-row">
-              <select id="algorithm-presets" aria-label="Saved algorithm presets">
-                <option value="">No saved algorithms</option>
+              <select id="algorithm-presets" aria-label="Algorithm presets">
+                <option value="">Choose an algorithm…</option>
               </select>
               <button id="load-algorithm-preset" class="button"
-                type="button">Load</button>
+                type="button" disabled>Load</button>
               <button id="delete-algorithm-preset" class="button"
-                type="button">Delete</button>
+                type="button" disabled>Delete</button>
             </div>
           </div>
 
@@ -170,20 +170,24 @@
           </div>
           <div class="slider-list">
             <label class="slider-row" for="exploreRate">
-              <span>Enter scouting <output id="exploreRate-value">2%</output></span>
-              <input id="exploreRate" type="range" min="0" max="30" value="2">
+              <span>Enter scouting <output id="exploreRate-value">0.7%</output></span>
+              <input id="exploreRate" type="range" min="0" max="30" step="0.1"
+                value="0.7">
             </label>
             <label class="slider-row" for="stopExploreChance">
-              <span>Stop scouting <output id="stopExploreChance-value">12% / s</output></span>
-              <input id="stopExploreChance" type="range" min="1" max="95" value="12">
+              <span>Stop scouting <output id="stopExploreChance-value">8.3% / s</output></span>
+              <input id="stopExploreChance" type="range" min="1" max="95" step="0.1"
+                value="8.3">
             </label>
             <label class="slider-row signal-persistent" for="exploreSignalBias">
-              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">ignore</output></span>
-              <input id="exploreSignalBias" type="range" min="-40" max="40" value="0">
+              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">1.1× avoid</output></span>
+              <input id="exploreSignalBias" type="range" min="-40" max="40" step="0.1"
+                value="-11">
             </label>
             <label class="slider-row" for="reversePenalty">
-              <span>U-turn weight <output id="reversePenalty-value">18%</output></span>
-              <input id="reversePenalty" type="range" min="1" max="100" value="18">
+              <span>U-turn weight <output id="reversePenalty-value">4.5%</output></span>
+              <input id="reversePenalty" type="range" min="1" max="100" step="0.1"
+                value="4.5">
             </label>
           </div>
 
@@ -194,16 +198,19 @@
           </div>
           <div class="slider-list">
             <label class="slider-row" for="headingInfluence">
-              <span>Straight-ahead bias <output id="headingInfluence-value">1.6×</output></span>
-              <input id="headingInfluence" type="range" min="0" max="40" value="16">
+              <span>Straight-ahead bias <output id="headingInfluence-value">1.58×</output></span>
+              <input id="headingInfluence" type="range" min="0" max="40" step="0.1"
+                value="15.8">
             </label>
             <label class="slider-row" for="distanceInfluence">
-              <span>Short-edge bias <output id="distanceInfluence-value">1.0×</output></span>
-              <input id="distanceInfluence" type="range" min="0" max="20" value="10">
+              <span>Short-edge bias <output id="distanceInfluence-value">0.41×</output></span>
+              <input id="distanceInfluence" type="range" min="0" max="20" step="0.1"
+                value="4.1">
             </label>
             <label class="slider-row" for="choiceFloor">
               <span>Unmarked branch floor <output id="choiceFloor-value">0%</output></span>
-              <input id="choiceFloor" type="range" min="0" max="100" value="0">
+              <input id="choiceFloor" type="range" min="0" max="100" step="0.1"
+                value="0">
             </label>
           </div>
 
@@ -214,12 +221,14 @@
           </div>
           <div class="slider-list">
             <label class="slider-row signal-food" for="fastInfluence">
-              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="fastInfluence-value">3.2×</output></span>
-              <input id="fastInfluence" type="range" min="0" max="100" value="32">
+              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="fastInfluence-value">4.56×</output></span>
+              <input id="fastInfluence" type="range" min="0" max="100" step="0.1"
+                value="45.6">
             </label>
             <label class="slider-row signal-food" for="outboundPolarity">
-              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="outboundPolarity-value">ignore</output></span>
-              <input id="outboundPolarity" type="range" min="-40" max="40" value="0">
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="outboundPolarity-value">0.78× climb</output></span>
+              <input id="outboundPolarity" type="range" min="-40" max="40" step="0.1"
+                value="7.8">
             </label>
           </div>
 
@@ -230,20 +239,24 @@
           </div>
           <div class="slider-list">
             <label class="slider-row signal-food" for="returnFastInfluence">
-              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="returnFastInfluence-value">1.0×</output></span>
-              <input id="returnFastInfluence" type="range" min="0" max="100" value="10">
+              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="returnFastInfluence-value">1.1×</output></span>
+              <input id="returnFastInfluence" type="range" min="0" max="100" step="0.1"
+                value="11">
             </label>
             <label class="slider-row signal-persistent" for="returnSlowInfluence">
-              <span><span><strong class="persistent-name">Persistent</strong>-signal pull</span> <output id="returnSlowInfluence-value">8.0×</output></span>
-              <input id="returnSlowInfluence" type="range" min="0" max="100" value="80">
+              <span><span><strong class="persistent-name">Persistent</strong>-signal pull</span> <output id="returnSlowInfluence-value">3.09×</output></span>
+              <input id="returnSlowInfluence" type="range" min="0" max="100" step="0.1"
+                value="30.9">
             </label>
             <label class="slider-row signal-food" for="returnFastPolarity">
-              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="returnFastPolarity-value">ignore</output></span>
-              <input id="returnFastPolarity" type="range" min="-40" max="40" value="0">
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="returnFastPolarity-value">1.4× descend</output></span>
+              <input id="returnFastPolarity" type="range" min="-40" max="40" step="0.1"
+                value="-14">
             </label>
             <label class="slider-row signal-persistent" for="returnSlowPolarity">
               <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="returnSlowPolarity-value">4.0× climb</output></span>
-              <input id="returnSlowPolarity" type="range" min="-40" max="40" value="40">
+              <input id="returnSlowPolarity" type="range" min="-40" max="40" step="0.1"
+                value="40">
             </label>
           </div>
 
@@ -261,12 +274,14 @@
               </select>
             </label>
             <label class="slider-row signal-persistent" for="slowHalfLife">
-              <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">42 s</output></span>
-              <input id="slowHalfLife" type="range" min="5" max="120" value="42">
+              <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">22.2 s</output></span>
+              <input id="slowHalfLife" type="range" min="5" max="120" step="0.1"
+                value="22.2">
             </label>
             <label class="slider-row signal-food" for="fastHalfLife">
-              <span><span><strong class="food-name">Food</strong> half-life</span> <output id="fastHalfLife-value">9 s</output></span>
-              <input id="fastHalfLife" type="range" min="2" max="40" value="9">
+              <span><span><strong class="food-name">Food</strong> half-life</span> <output id="fastHalfLife-value">14.4 s</output></span>
+              <input id="fastHalfLife" type="range" min="2" max="40" step="0.1"
+                value="14.4">
             </label>
           </div>
 
