@@ -52,7 +52,7 @@ const availableNode = (state, excluded = []) =>
 
 Deno.test("the current engine satisfies the versioned registry contract", () => {
   const engine = getEngine(CURRENT_ENGINE_ID);
-  assertEquals(ENGINES, [engine]);
+  assert(ENGINES.includes(engine));
   assert(Object.isFrozen(ENGINES));
   assert(Object.isFrozen(engine));
   assertEquals(engine.id, CURRENT_ENGINE_ID);

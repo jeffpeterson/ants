@@ -1,4 +1,5 @@
 import * as current from "./current.js";
+import { HISTORICAL_ENGINES } from "./historical/engines.js";
 
 export const CURRENT_ENGINE_ID = "scalar-field";
 export const CURRENT_ENGINE_VERSION = 1;
@@ -22,7 +23,12 @@ const currentEngine = Object.freeze({
   foodProbabilitiesForNode: current.foodProbabilitiesForNode,
 });
 
-export const ENGINES = Object.freeze([currentEngine]);
+export { HISTORICAL_ENGINES };
+
+export const ENGINES = Object.freeze([
+  currentEngine,
+  ...HISTORICAL_ENGINES,
+]);
 
 const enginesById = Object.freeze(
   Object.fromEntries(ENGINES.map((engine) => [engine.id, engine])),

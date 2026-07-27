@@ -22,6 +22,7 @@ export {
   ENGINES,
   getEngine,
   getStateEngine,
+  HISTORICAL_ENGINES,
 } from "./engines/registry.js";
 
 const tagState = (state, engine) => ({
