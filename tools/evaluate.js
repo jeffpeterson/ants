@@ -7,6 +7,7 @@ import {
   TRAINING_SCENARIOS,
   VALIDATION_SCENARIOS,
 } from "../src/optimization.js";
+import { presetRef, resolveAlgorithmPreset } from "../src/presets.js";
 import { parseArgs, parseAssignments } from "./args.js";
 
 const options = parseArgs(Deno.args);
@@ -32,11 +33,19 @@ const scenarios = suite.slice(0, limit);
 const imported = typeof options.input === "string" && options.input !== "true"
   ? JSON.parse(await Deno.readTextFile(options.input))
   : null;
+const preset = typeof options.preset === "string" && options.preset !== "true"
+  ? resolveAlgorithmPreset(presetRef("builtin", options.preset))
+  : null;
+if (options.preset !== undefined && preset === null) {
+  throw new Error(`Unknown built-in preset "${options.preset}"`);
+}
 const candidates = imported !== null
   ? [{
     id: options.name ?? "imported",
     params: imported.winner ?? imported.params ?? imported,
   }]
+  : preset !== null
+  ? [{ id: preset.id, params: preset.params }]
   : options.candidate === "defaults"
   ? [{ id: "defaults", params: DEFAULTS }]
   : options.candidate === "hypothesis"
