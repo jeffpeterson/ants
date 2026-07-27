@@ -689,16 +689,54 @@ Deno.test("the scouting exit control is a frame-rate-independent probability", (
 
 Deno.test("the whole colony leaves without route or visited-set memory", () => {
   const initial = createSimulation({ seed: 41 });
-  const started = stepSimulation(initial, 1 / 30);
-  assertEquals(
-    started.ants.filter(({ edge }) => edge !== null).length,
-    initial.ants.length,
-  );
+  const started = run(initial, initial.ants.length + 1, 1 / 60);
   assert(started.ants.every((ant) =>
+    ant.launchDelay < 1e-9 &&
+    ant.exploreChoices + ant.followChoices > 0 &&
     !Object.hasOwn(ant, "route") &&
     !Object.hasOwn(ant, "visited") &&
     ant.searchState.kind === "explore"
   ));
+});
+
+Deno.test("launch staggering lets later ants see the first edge trail", () => {
+  const initial = createSimulation({
+    seed: 41,
+    params: {
+      antCount: 64,
+      speed: 0.04,
+      unchartedPreference: 1,
+    },
+  });
+  const started = stepSimulation(initial, 0.001);
+  const homeNeighbors = initial.graph.adjacency[initial.graph.hill];
+  const armed = (state) =>
+    state.ants.filter((ant) => ant.searchState.frontierArmed === true);
+  const coveredHomeEdges = (state) =>
+    homeNeighbors.filter((neighbor) =>
+      state.pheromones.slowEdges[edgeKey(initial.graph.hill, neighbor)] > 0
+    );
+
+  assertEquals(armed(started).length, 1);
+  assertEquals(coveredHomeEdges(started).length, 1);
+  assert(
+    started.graph.nodes
+      .filter(({ id }) => id !== initial.graph.hill)
+      .every(({ id }) => started.pheromones.slow[id] === 0),
+    "Coverage must be written on edge entry before node potential arrives",
+  );
+
+  const reversed = stepSimulation({
+    ...initial,
+    ants: initial.ants.toReversed(),
+  }, 0.001);
+  assertEquals(reversed.ants, started.ants);
+  assertEquals(reversed.pheromones, started.pheromones);
+  assertEquals(reversed.rngSeed, started.rngSeed);
+
+  const spread = run(initial, homeNeighbors.length + 1, 1 / 60);
+  assertEquals(armed(spread).length, homeNeighbors.length);
+  assertEquals(coveredHomeEdges(spread).length, homeNeighbors.length);
 });
 
 Deno.test("food signal is deposited only after pickup", () => {

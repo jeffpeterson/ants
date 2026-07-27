@@ -123,6 +123,11 @@ strictly follows increasing persistent levels home. Established downhill travel 
 limited. The ant stores only that bit, its mode, and its incoming edge; it has no route
 or visited set. Escape traffic does not refresh persistent coverage.
 
+New ants launch 1/60 second apart and then retain that physical spacing. Ants act in
+stable ID order within each simulation tick, mutating that tick's cloned pheromone
+fields as they move. Coverage is marked when an ant enters an edge, so the next ant sees
+the ordinary trail directly. The completed fields become the next simulation state.
+
 ## Current-engine invariants
 
 - Persistent pheromone is one scalar home potential per node plus one bounded coverage
@@ -139,6 +144,8 @@ or visited set. Escape traffic does not refresh persistent coverage.
   personal visited set or a graph-wide query. Shared coverage is only a novelty cue,
   never proof of a dead end. Only a frontier-armed scout can return from local
   exhaustion, and covered downhill branches always remain valid outbound progress.
+- Edge coverage is written on entry. Node potential is proposed on arrival. Deposits
+  from an earlier ant in stable tick order are locally visible to later ants.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
   incident-edge coverage, edge length, mode, one frontier bit, and seeded randomness. It
   never reads a route, visited set, shortest-path result, or graph-wide statistic.

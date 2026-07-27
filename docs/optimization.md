@@ -344,6 +344,22 @@ separately; `20%/s` had the best held-out delivery total among frontier candidat
 the 80-second horizon. Recruitment experiments should recover short-map convergence
 without weakening the frontier invariant.
 
+### Staggered pheromone writes
+
+The first frontier-bit implementation advanced every ant against one pre-tick field.
+That synchronous snapshot let a whole wave classify the same edge as unwalked and arm
+itself before any coverage became visible. New ants now launch 1/60 second apart. Each
+tick clones the decayed fields once, then ants in stable ID order write ordinary
+edge-entry coverage into that working copy. Later ants therefore see the trail directly,
+without a second coverage representation or any nonlocal state.
+
+At browser fidelity on 12 paired default maps, the two-second launch window armed `733`
+of `768` ants under the synchronous update and `60` with staggered writes; escape counts
+fell from `4` to `0`. At 40 seconds the staggered version delivered `1,143` loads versus
+`1,253`, while 200-node coverage was unchanged in a separate eight-map check. The later
+recruitment experiment must recover that throughput without reintroducing synchronized
+frontier classification.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:

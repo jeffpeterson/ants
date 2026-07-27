@@ -29,6 +29,7 @@ export const DEFAULTS = Object.freeze({
 const UINT32_RANGE = 4_294_967_296;
 const EPSILON = 1e-9;
 const HOME_ATTENUATION = 2;
+const ANT_LAUNCH_INTERVAL = 1 / 60;
 
 export const clamp = (minimum, maximum, value) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -455,11 +456,12 @@ const graphParameters = (params) => ({
   mapVariation: params.mapVariation,
 });
 
-const makeAnt = (id, hill) => ({
+const makeAnt = (id, hill, launchDelay) => ({
   id,
   node: hill,
   edge: null,
   mode: "search",
+  launchDelay,
   previous: null,
   tripDistance: 0,
   turnAround: null,
@@ -472,7 +474,12 @@ const makeAnt = (id, hill) => ({
 const generateAnts = (count, hill, seed, startId = 0) => ({
   ants: Array.from(
     { length: count },
-    (_, index) => makeAnt(startId + index, hill),
+    (_, index) =>
+      makeAnt(
+        startId + index,
+        hill,
+        index * ANT_LAUNCH_INTERVAL,
+      ),
   ),
   rngSeed: seed,
 });
@@ -1026,12 +1033,6 @@ const arrive = (ant, graph, pheromones, params) => {
         amount: attenuateHome(source, ant.edge.length),
         combine: "max",
       },
-      {
-        channel: "slowEdges",
-        target: edgeKey(ant.edge.from, ant.edge.to),
-        amount: 1,
-        combine: "max",
-      },
     ]
     : [];
   const result = returning ? arriveReturning(ant, graph) : arriveSearching(ant, graph);
@@ -1061,6 +1062,18 @@ const arrive = (ant, graph, pheromones, params) => {
   };
 };
 
+const edgeEntryDeposits = (ant) =>
+  ant.edge !== null &&
+    ant.mode === "search" &&
+    ant.searchState.kind !== "escape"
+    ? [{
+      channel: "slowEdges",
+      target: edgeKey(ant.edge.from, ant.edge.to),
+      amount: 1,
+      combine: "max",
+    }]
+    : [];
+
 const advanceAnt = (
   ant,
   graph,
@@ -1072,6 +1085,24 @@ const advanceAnt = (
 ) => {
   if (dt <= EPSILON || crossings >= 8) {
     return { ant, seed, deposits: [], events: [] };
+  }
+  if (ant.launchDelay > EPSILON) {
+    const waiting = Math.min(dt, ant.launchDelay);
+    const ready = {
+      ...ant,
+      launchDelay: Math.max(0, ant.launchDelay - waiting),
+    };
+    return dt - waiting <= EPSILON
+      ? { ant: ready, seed, deposits: [], events: [] }
+      : advanceAnt(
+        ready,
+        graph,
+        pheromones,
+        params,
+        seed,
+        dt - waiting,
+        crossings,
+      );
   }
 
   const discovered = ant.mode === "search" && ant.edge === null &&
@@ -1096,6 +1127,7 @@ const advanceAnt = (
     };
   }
 
+  const starting = ant.edge === null;
   const [movingAnt, nextSeed] = ant.edge
     ? [ant, seed]
     : startEdge(ant, graph, pheromones, params, seed);
@@ -1107,6 +1139,7 @@ const advanceAnt = (
       events: [],
     };
   }
+  const entryDeposits = starting ? edgeEntryDeposits(movingAnt) : [];
   const distanceRemaining = movingAnt.edge.length * (1 - movingAnt.edge.progress);
   const travelDistance = params.speed * dt;
 
@@ -1120,7 +1153,7 @@ const advanceAnt = (
         },
       },
       seed: nextSeed,
-      deposits: [],
+      deposits: entryDeposits,
       events: [],
     };
   }
@@ -1139,34 +1172,23 @@ const advanceAnt = (
   return {
     ant: continued.ant,
     seed: continued.seed,
-    deposits: [...arrival.deposits, ...continued.deposits],
+    deposits: [
+      ...entryDeposits,
+      ...arrival.deposits,
+      ...continued.deposits,
+    ],
     events: [...arrival.events, ...continued.events],
   };
 };
 
-const addDeposits = (pheromones, deposits) => {
-  const byChannel = Object.groupBy(deposits, ({ channel }) => channel);
-  return Object.fromEntries(
-    Object.entries(pheromones).map(([channel, field]) => {
-      const byTarget = Object.groupBy(
-        byChannel[channel] ?? [],
-        ({ target }) => target,
-      );
-      const updates = Object.fromEntries(
-        Object.entries(byTarget).map(([target, targetDeposits]) => [
-          target,
-          targetDeposits.reduce(
-            (value, deposit) =>
-              deposit.combine === "max"
-                ? Math.max(value, deposit.amount)
-                : value + deposit.amount,
-            field[target],
-          ),
-        ]),
-      );
-      return [channel, { ...field, ...updates }];
-    }),
-  );
+const applyDeposits = (pheromones, deposits) => {
+  deposits.forEach((deposit) => {
+    const field = pheromones[deposit.channel];
+    field[deposit.target] = deposit.combine === "max"
+      ? Math.max(field[deposit.target], deposit.amount)
+      : field[deposit.target] + deposit.amount;
+  });
+  return pheromones;
 };
 
 const updateStats = (stats, events) =>
@@ -1211,6 +1233,7 @@ export const stepSimulation = (state, seconds) => {
     decayPheromones(state.pheromones, state.params, dt),
     state.graph.hill,
   );
+  const workingPheromones = decayed;
   const advanced = state.ants
     .toSorted((first, second) => first.id - second.id)
     .reduce(
@@ -1231,21 +1254,21 @@ export const stepSimulation = (state, seconds) => {
           ready.seed,
           dt,
         );
+        applyDeposits(workingPheromones, next.deposits);
         return {
           ants: [...result.ants, next.ant],
           rngSeed: next.seed,
-          deposits: [...result.deposits, ...next.deposits],
           events: [...result.events, ...next.events],
         };
       },
-      { ants: [], rngSeed: state.rngSeed, deposits: [], events: [] },
+      { ants: [], rngSeed: state.rngSeed, events: [] },
     );
 
   return {
     ...state,
     rngSeed: advanced.rngSeed,
     elapsed: state.elapsed + dt,
-    pheromones: addDeposits(decayed, advanced.deposits),
+    pheromones: workingPheromones,
     ants: advanced.ants,
     lastEvents: advanced.events,
     stats: updateStats(state.stats, advanced.events),
