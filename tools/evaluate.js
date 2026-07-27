@@ -1,6 +1,7 @@
 import { DEFAULTS } from "../src/colony.js";
 import {
   evaluateCandidate,
+  EVALUATION_VERSION,
   HYPOTHESIS_PARAMS,
   SCREENING_SCENARIOS,
   STRESS_SCENARIOS,
@@ -65,6 +66,7 @@ const results = candidates.map(({ id, params }) => {
   };
 });
 const report = {
+  version: EVALUATION_VERSION,
   suite: suiteName,
   scenarioCount: scenarios.length,
   dt,
