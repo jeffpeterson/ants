@@ -269,6 +269,39 @@ Deno.test("a branch reads the signal at its opposite node", () => {
   );
 });
 
+Deno.test("node food signal is visible only along traversed edges", () => {
+  const pheromones = {
+    slow: { 0: 0, 1: 0, 2: 0 },
+    fast: { 0: 0.7, 1: 100, 2: 1 },
+    fastEdges: {
+      [edgeKey(0, 1)]: 0,
+      [edgeKey(0, 2)]: 0.7,
+    },
+  };
+  const params = parameters({
+    choiceFloor: 0,
+    fastInfluence: 2,
+    outboundPolarity: 4,
+  });
+
+  assertEquals(choiceProbabilities(1, [0], pheromones, params), []);
+  assertEquals(
+    choiceProbabilities(0, [1, 2], pheromones, params)
+      .find(({ node }) => node === 1)?.probability,
+    0,
+  );
+  const correction = choiceProbabilities(
+    0,
+    [1, 2],
+    pheromones,
+    { ...params, choiceFloor: 1 },
+  );
+  assert(
+    correction.find(({ node }) => node === 2).probability >
+      correction.find(({ node }) => node === 1).probability,
+  );
+});
+
 Deno.test("the unmarked branch floor permits local error correction", () => {
   const pheromones = {
     slow: { 0: 0, 1: 0, 2: 0 },
@@ -786,20 +819,29 @@ Deno.test("carriers deposit food signal only while making homeward progress", ()
         returnTrail: "signal",
       },
     };
-    return stepSimulation({
-      ...initial,
-      pheromones: { ...initial.pheromones, slow },
-      ants: [ant],
-    }, dt);
+    return {
+      edge,
+      state: stepSimulation({
+        ...initial,
+        pheromones: { ...initial.pheromones, slow },
+        ants: [ant],
+      }, dt),
+    };
   };
 
-  const away = crossing(0.2);
+  const { state: away } = crossing(0.2);
   assert(Object.values(away.pheromones.fast).every((value) => value === 0));
   assert(Object.values(away.pheromones.fastEdges).every((value) => value === 0));
 
-  const homeward = crossing(0.8);
+  const { edge, state: homeward } = crossing(0.8);
   assert(Object.values(homeward.pheromones.fast).some((value) => value > 0));
   assert(Object.values(homeward.pheromones.fastEdges).some((value) => value > 0));
+  assertEquals(
+    Object.entries(homeward.pheromones.fastEdges)
+      .filter(([, value]) => value > 0)
+      .map(([key]) => key),
+    [edge.id],
+  );
 });
 
 Deno.test("food pickup reverses the incoming edge before local homing", () => {

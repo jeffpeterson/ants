@@ -133,12 +133,13 @@ the ordinary trail directly. The completed fields become the next simulation sta
 - Persistent pheromone is one scalar home potential per node plus one bounded coverage
   mark per undirected edge. Food pheromone is either one scalar per node or per
   undirected edge. None stores direction; renderer arrows derive only from endpoint
-  slopes.
+  slopes. A node food level is active only on edges that a carrier traversed, so a
+  junction deposit cannot leak onto untouched side branches.
 - Home is pinned to `1`; every accepted non-home persistent write is attenuated from the
   live level at the edge's other endpoint. Persistent traffic is never additive.
 - Food pheromone is written only at pickup or by a loaded ant making strict local
   home-potential progress. Outbound followers, scouts, and wandering carriers never
-  write it.
+  write it, and a carrier marks only its current edge.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
 - “Unwalked” means an incident edge has no persistent coverage mark; it is not a
   personal visited set or a graph-wide query. Shared coverage is only a novelty cue,

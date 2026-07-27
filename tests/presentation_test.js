@@ -1,4 +1,4 @@
-import { deriveMetrics, ENGINES, stepSimulation } from "../src/colony.js";
+import { deriveMetrics, edgeKey, ENGINES, stepSimulation } from "../src/colony.js";
 import { createPlaygroundSimulation } from "../src/playground.js";
 import {
   antStateCountsFor,
@@ -103,6 +103,39 @@ Deno.test("current node and edge trail rendering retains scalar parity", () => {
     escaping: 0,
     carrying: 0,
   });
+});
+
+Deno.test("node food rendering excludes adjacent untraversed edges", () => {
+  const initial = createPlaygroundSimulation({ map });
+  const junction = initial.graph.nodes.find(({ id }) =>
+    initial.graph.adjacency[id].length > 1
+  );
+  assert(junction);
+  const [traversed, adjacent] = initial.graph.adjacency[junction.id];
+  const traversedEdge = edgeKey(junction.id, traversed);
+  const adjacentEdge = edgeKey(junction.id, adjacent);
+  const state = {
+    ...initial,
+    params: { ...initial.params, foodTrailModel: "node" },
+    pheromones: {
+      ...initial.pheromones,
+      fast: {
+        ...initial.pheromones.fast,
+        [junction.id]: 0.7,
+        [traversed]: 1,
+      },
+      fastEdges: {
+        ...initial.pheromones.fastEdges,
+        [traversedEdge]: 0.7,
+      },
+    },
+  };
+  const fastEdges = trailSegments(state)
+    .filter(({ channel }) => channel === "fast")
+    .map(({ edgeId }) => edgeId);
+
+  assert(fastEdges.includes(traversedEdge));
+  assert(!fastEdges.includes(adjacentEdge));
 });
 
 Deno.test("all engine schemas normalize trails, ants, and metrics for rendering", () => {

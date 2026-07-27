@@ -44,7 +44,7 @@ export const CONTROL_HELP = Object.freeze({
   choiceFloor:
     "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
   foodTrailModel:
-    "Store food pheromone as scalar node levels with derived slopes, or on undirected edges with no stored direction. Switching preserves both live fields.",
+    "Use scalar node levels for derived slopes along carrier-traversed edges, or use undirected edge strength with no slope. Neither mode marks adjacent untraversed branches.",
   fastInfluence:
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:

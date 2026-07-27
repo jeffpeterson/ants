@@ -22,6 +22,7 @@ const currentTrailView = (simulation) => {
         nodes: simulation.pheromones.fast,
         edges: EMPTY_FIELD,
         arcs: EMPTY_FIELD,
+        edgeMask: simulation.pheromones.fastEdges,
       },
   };
 };
@@ -32,6 +33,7 @@ export const trailViewFor = (simulation) =>
     : simulation.trailView;
 
 const nodeSegment = (channel, edge, view) => {
+  if (view.edgeMask !== undefined && !positive(view.edgeMask[edge.id])) return [];
   const fromLevel = view.nodes[edge.a] ?? 0;
   const toLevel = view.nodes[edge.b] ?? 0;
   return positive(fromLevel + toLevel)

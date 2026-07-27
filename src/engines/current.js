@@ -580,13 +580,21 @@ const relativeGradient = (field, node, neighbor) => {
   return (there - here) / Math.max(EPSILON, here + there);
 };
 
+const signalMarked = (signal, node, neighbor) =>
+  signal.edgeMask === undefined ||
+  (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > EPSILON;
+
 const signalValue = (signal, node, neighbor) =>
-  signal.edgeField
-    ? signal.field[edgeKey(node, neighbor)] ?? 0
-    : signal.field[neighbor] ?? 0;
+  signalMarked(signal, node, neighbor)
+    ? signal.edgeField
+      ? signal.field[edgeKey(node, neighbor)] ?? 0
+      : signal.field[neighbor] ?? 0
+    : 0;
 
 const signalPolarity = (signal, node, neighbor) =>
-  signal.edgeField ? 0 : relativeGradient(signal.field, node, neighbor);
+  signal.edgeField || !signalMarked(signal, node, neighbor)
+    ? 0
+    : relativeGradient(signal.field, node, neighbor);
 
 const edgeCoverage = (pheromones, node, neighbor) =>
   pheromones.slowEdges?.[edgeKey(node, neighbor)] ?? 0;
@@ -604,6 +612,7 @@ const foodSignal = (pheromones, params, influence, polarity) =>
     }
     : {
       field: pheromones.fast,
+      edgeMask: pheromones.fastEdges,
       edgeField: false,
       influence,
       polarity,

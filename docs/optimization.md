@@ -360,6 +360,15 @@ fell from `4` to `0`. At 40 seconds the staggered version delivered `1,143` load
 recruitment experiment must recover that throughput without reintroducing synchronized
 frontier classification.
 
+### Food-trail locality
+
+Node concentration alone made a carrier's arrival level appear on every edge incident to
+that node. The carrier had already recorded its traversed food edge, but the node
+navigator and renderer ignored it. Node food levels now use that undirected edge field
+as a support mask: endpoint levels still derive polarity, while only carrier-traversed
+edges expose or display the signal. An untouched side branch cannot acquire food
+attraction merely because it shares a junction with the return path.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:
