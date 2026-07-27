@@ -245,6 +245,37 @@ Deno.test("food pickup reverses the incoming edge before local homing", () => {
   assert(state.graph.adjacency[turnaround.edge.from].includes(turnaround.edge.to));
 });
 
+Deno.test("simulation exposes tagged pickup and delivery measurements", () => {
+  let state = createSimulation({
+    seed: 8,
+    params: { speed: 0.65, antCount: 16 },
+  });
+  const events = [];
+  for (
+    let step = 0;
+    step < 2_000 && !events.some(({ type }) => type === "delivery");
+    step += 1
+  ) {
+    state = stepSimulation(state, 0.25);
+    events.push(...state.lastEvents);
+  }
+  const discovery = events.find(({ type }) => type === "discovery");
+  const delivery = events.find(({ type, antId }) =>
+    type === "delivery" && antId === discovery?.antId
+  );
+
+  assert(discovery !== undefined);
+  assert(state.graph.foods.includes(discovery.food));
+  assert(discovery.distance >= state.stats.shortestDistance);
+  assert(delivery !== undefined);
+  assert(delivery.distance >= discovery.distance + state.stats.shortestDistance);
+  assert(
+    state.ants.every((ant) =>
+      !Object.hasOwn(ant, "route") && !Object.hasOwn(ant, "visited")
+    ),
+  );
+});
+
 Deno.test("clustered colonies form productive, mostly efficient leading trails", () => {
   const results = Array.from({ length: 12 }, (_, seed) => {
     const final = run(createSimulation({ seed: seed + 1 }), 720);

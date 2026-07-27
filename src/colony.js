@@ -451,6 +451,7 @@ const generateAnts = (count, hill, seed, startId = 0) => ({
 
 export const createSimulation = ({
   seed = 1837,
+  runSeed,
   params: values = {},
   hill,
   foods,
@@ -473,7 +474,7 @@ export const createSimulation = ({
   const generatedAnts = generateAnts(
     params.antCount,
     graph.hill,
-    graphRngSeed,
+    Number.isFinite(Number(runSeed)) ? Number(runSeed) >>> 0 : graphRngSeed,
   );
   const optimum = shortestRouteToFood(graph);
 
@@ -486,6 +487,7 @@ export const createSimulation = ({
     graph,
     pheromones: emptyPheromones(graph),
     ants: generatedAnts.ants,
+    lastEvents: [],
     stats: {
       deliveries: 0,
       discoveries: 0,
@@ -791,6 +793,7 @@ const beginReturn = (ant) => {
     },
     events: [{
       type: "discovery",
+      antId: ant.id,
       distance: ant.tripDistance,
       food: ant.node,
     }],
@@ -816,11 +819,13 @@ const arriveSearching = (ant, graph) => {
 
 const arriveReturning = (ant, graph) => {
   const atHill = ant.edge.to === graph.hill;
+  const tripDistance = ant.tripDistance + ant.edge.length;
   const arrived = {
     ...ant,
     node: ant.edge.to,
     edge: null,
     previous: ant.edge.from,
+    tripDistance,
     homeLevel: atHill ? 1 : ant.edge.homeTo,
   };
 
@@ -836,7 +841,11 @@ const arriveReturning = (ant, graph) => {
         turnAround: null,
         trips: ant.trips + 1,
       },
-      events: [{ type: "delivery" }],
+      events: [{
+        type: "delivery",
+        antId: ant.id,
+        distance: tripDistance,
+      }],
       deposits: [],
     }
     : { ant: arrived, events: [], deposits: [] };
@@ -1038,6 +1047,7 @@ export const stepSimulation = (state, seconds) => {
     elapsed: state.elapsed + dt,
     pheromones: addDeposits(decayed, advanced.deposits),
     ants: advanced.ants,
+    lastEvents: advanced.events,
     stats: updateStats(state.stats, advanced.events),
   };
 };
@@ -1076,6 +1086,7 @@ export const resetRun = (state) => {
     elapsed: 0,
     pheromones: emptyPheromones(state.graph),
     ants: generated.ants,
+    lastEvents: [],
     stats: {
       ...state.stats,
       deliveries: 0,
