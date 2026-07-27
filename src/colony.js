@@ -6,6 +6,7 @@ import {
 } from "./engines/registry.js";
 
 export {
+  ageFoodDistance,
   attenuateFood,
   choiceProbabilities,
   clamp,
@@ -14,6 +15,7 @@ export {
   DEFAULTS,
   edgeKey,
   explorationStopProbability,
+  foodCloseness,
   generateGraph,
   homeCloseness,
   homewardProbabilities,

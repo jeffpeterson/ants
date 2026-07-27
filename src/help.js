@@ -50,13 +50,13 @@ export const CONTROL_HELP = Object.freeze({
   newTrailSignalShare:
     "For additive trails, a weak food node makes the ant carry enough pheromone to compete with the signal at the endpoint it arrived from.",
   foodHalfDistance:
-    "For bounded potential, the local food field halves after this much route distance. Shorter values create a steeper foodward gradient.",
+    "Route length that halves bounded food potential or synthetic food-distance closeness. Shorter values make shorter and fresher routes dominate more strongly.",
   foodReinforcement:
     "For bounded potential, the fraction of the locally safe signal gap filled by each carrier traversal.",
   homeReinforcement:
     "Fraction of the locally safe persistent home-field gap filled by each searching ant traversal. Lower values let repeated traffic strengthen the field gradually; 100% fills it in one pass.",
   foodTrailModel:
-    "Use additive node levels, bounded node potential, or undirected edge strength. Node slopes are exposed only along carrier-traversed edges.",
+    "Use additive node levels, bounded node potential, synthetic distance to recently found food, or undirected edge strength. Node slopes are exposed only along carrier-traversed edges.",
   homeSignalModel:
     "Use reinforced pheromone, or a synthetic local distance estimate. Distance mode starts home at zero and lets ants and nodes exchange only shorter estimates.",
   fastInfluence:

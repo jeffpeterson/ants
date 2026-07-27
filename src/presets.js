@@ -74,6 +74,14 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
     },
   ),
   builtIn(
+    "synthetic-food-distance",
+    "Synthetic food distance",
+    "Decaying local distance-vector control: carrier traversals teach recently found food distance without route memory.",
+    {
+      foodTrailModel: "distance",
+    },
+  ),
+  builtIn(
     "bounded-potential",
     "Bounded food potential",
     "Experimental local food gradient: bounded propagation prevents population-size amplification and non-food peaks.",

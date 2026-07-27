@@ -60,6 +60,39 @@ Deno.test("synthetic home distances render as homeward closeness", () => {
   assertEquals(nodes[remote], 0);
 });
 
+Deno.test("synthetic food distances render as fresh-food closeness", () => {
+  const initial = createPlaygroundSimulation({ map });
+  const edge = initial.graph.edges[0];
+  const state = {
+    ...initial,
+    params: {
+      ...initial.params,
+      foodTrailModel: "distance",
+      foodHalfDistance: 0.5,
+    },
+    pheromones: {
+      ...initial.pheromones,
+      fast: {
+        ...Object.fromEntries(initial.graph.nodes.map(({ id }) => [id, -1])),
+        [edge.a]: 0,
+        [edge.b]: 0.5,
+      },
+      fastEdges: {
+        ...Object.fromEntries(initial.graph.edges.map(({ id }) => [id, -1])),
+        [edge.id]: 0.25,
+      },
+    },
+  };
+  const view = trailViewFor(state).fast;
+
+  assertEquals(view.nodes[edge.a], 1);
+  assert(Math.abs(view.nodes[edge.b] - 0.5) < 1e-12);
+  assert(Math.abs(view.edgeMask[edge.id] - Math.SQRT1_2) < 1e-12);
+  initial.graph.edges
+    .filter(({ id }) => id !== edge.id)
+    .forEach(({ id }) => assertEquals(view.edgeMask[id], 0));
+});
+
 Deno.test("current node and edge trail rendering retains scalar parity", () => {
   const initial = createPlaygroundSimulation({ map });
   const edge = initial.graph.edges[0];

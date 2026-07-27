@@ -1,8 +1,12 @@
-import { getEngine, homeCloseness } from "./colony.js";
+import { foodCloseness, getEngine, homeCloseness } from "./colony.js";
 import { activeFoodsFor } from "./playground.js";
 
 const positive = (value) => Number.isFinite(value) && value > 0;
 const EMPTY_FIELD = Object.freeze({});
+const mapField = (field, transform) =>
+  Object.fromEntries(
+    Object.entries(field).map(([key, value]) => [key, transform(value)]),
+  );
 
 export const trailStrength = (channel, value) => {
   if (!positive(value)) return 0;
@@ -14,13 +18,24 @@ export const trailStrength = (channel, value) => {
 const currentTrailView = (simulation) => {
   const edgeFood = simulation.params.foodTrailModel === "edge";
   const homeNodes = simulation.params.homeSignalModel === "distance"
-    ? Object.fromEntries(
-      Object.entries(simulation.pheromones.slow).map(([node, value]) => [
-        node,
-        homeCloseness(value, "distance"),
-      ]),
+    ? mapField(
+      simulation.pheromones.slow,
+      (value) => homeCloseness(value, "distance"),
     )
     : simulation.pheromones.slow;
+  const distanceFood = simulation.params.foodTrailModel === "distance";
+  const foodLevel = (value) =>
+    foodCloseness(
+      value,
+      simulation.params.foodTrailModel,
+      simulation.params.foodHalfDistance,
+    );
+  const foodNodes = distanceFood
+    ? mapField(simulation.pheromones.fast, foodLevel)
+    : simulation.pheromones.fast;
+  const foodEdges = distanceFood
+    ? mapField(simulation.pheromones.fastEdges, foodLevel)
+    : simulation.pheromones.fastEdges;
   return {
     slow: {
       nodes: homeNodes,
@@ -34,10 +49,10 @@ const currentTrailView = (simulation) => {
         arcs: EMPTY_FIELD,
       }
       : {
-        nodes: simulation.pheromones.fast,
+        nodes: foodNodes,
         edges: EMPTY_FIELD,
         arcs: EMPTY_FIELD,
-        edgeMask: simulation.pheromones.fastEdges,
+        edgeMask: foodEdges,
       },
   };
 };

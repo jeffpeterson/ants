@@ -36,6 +36,7 @@ export const DEFAULTS = Object.freeze({
 const UINT32_RANGE = 4_294_967_296;
 const EPSILON = 1e-9;
 const EXPLORATION_HOME_FLOOR = 1e-6;
+const FOOD_SIGNAL_CUTOFF = 1e-6;
 const HOME_ATTENUATION = 2;
 const ANT_LAUNCH_INTERVAL = 1 / 60;
 
@@ -102,7 +103,7 @@ export const sanitizeParams = (values = {}) => ({
     1,
     finiteOr(DEFAULTS.choiceFloor, values.choiceFloor),
   ),
-  foodTrailModel: ["edge", "potential"].includes(values.foodTrailModel)
+  foodTrailModel: ["distance", "edge", "potential"].includes(values.foodTrailModel)
     ? values.foodTrailModel
     : "node",
   foodHalfDistance: clamp(
@@ -487,11 +488,21 @@ const emptyHomeField = (graph, params) =>
     )
     : { ...emptyField(graph), [graph.hill]: 1 };
 
+const emptyFoodField = (graph, params) =>
+  params.foodTrailModel === "distance"
+    ? Object.fromEntries(graph.nodes.map(({ id }) => [id, -1]))
+    : emptyField(graph);
+
+const emptyFoodEdgeField = (graph, params) =>
+  params.foodTrailModel === "distance"
+    ? Object.fromEntries(graph.edges.map(({ id }) => [id, -1]))
+    : emptyEdgeField(graph);
+
 const emptyPheromones = (graph, params) => ({
   slow: emptyHomeField(graph, params),
   slowEdges: emptyEdgeField(graph),
-  fast: emptyField(graph),
-  fastEdges: emptyEdgeField(graph),
+  fast: emptyFoodField(graph, params),
+  fastEdges: emptyFoodEdgeField(graph, params),
 });
 
 const graphParameters = (params) => ({
@@ -589,7 +600,7 @@ export const createSimulation = ({
   };
 };
 
-const decayField = (field, halfLife, dt, cutoff = 1e-6) => {
+const decayField = (field, halfLife, dt, cutoff = FOOD_SIGNAL_CUTOFF) => {
   const factor = Math.pow(0.5, dt / halfLife);
   return Object.fromEntries(
     Object.entries(field).map(([node, value]) => {
@@ -599,13 +610,42 @@ const decayField = (field, halfLife, dt, cutoff = 1e-6) => {
   );
 };
 
+export const ageFoodDistance = (
+  value,
+  halfDistance,
+  halfLife,
+  dt,
+  cutoff = FOOD_SIGNAL_CUTOFF,
+) => {
+  if (!Number.isFinite(value) || value < 0) return -1;
+  const aged = value + halfDistance * dt / halfLife;
+  return Math.pow(2, -aged / halfDistance) < cutoff ? -1 : aged;
+};
+
+const ageFoodField = (field, params, dt) =>
+  Object.fromEntries(
+    Object.entries(field).map(([key, value]) => [
+      key,
+      ageFoodDistance(
+        value,
+        params.foodHalfDistance,
+        params.fastHalfLife,
+        dt,
+      ),
+    ]),
+  );
+
 export const decayPheromones = (pheromones, params, dt) => ({
   slow: params.homeSignalModel === "distance"
     ? { ...pheromones.slow }
     : decayField(pheromones.slow, params.slowHalfLife, dt, 0),
   slowEdges: decayField(pheromones.slowEdges ?? {}, params.slowHalfLife, dt),
-  fast: decayField(pheromones.fast, params.fastHalfLife, dt),
-  fastEdges: decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
+  fast: params.foodTrailModel === "distance"
+    ? ageFoodField(pheromones.fast, params, dt)
+    : decayField(pheromones.fast, params.fastHalfLife, dt),
+  fastEdges: params.foodTrailModel === "distance"
+    ? ageFoodField(pheromones.fastEdges ?? {}, params, dt)
+    : decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
 });
 
 const anchorHill = (pheromones, hill, params) => ({
@@ -639,9 +679,18 @@ const relativeGradient = (field, node, neighbor, floor = 0) => {
   return total > 0 ? (there - here) / total : 0;
 };
 
+const knownDistance = (value) => Number.isFinite(value) && value >= 0;
+
 export const homeCloseness = (value, model) =>
   model === "distance"
-    ? Number.isFinite(value) && value >= 0 ? 1 / (1 + value) : 0
+    ? knownDistance(value) ? 1 / (1 + value) : 0
+    : Number.isFinite(value) && value > 0
+    ? value
+    : 0;
+
+export const foodCloseness = (value, model, halfDistance) =>
+  model === "distance"
+    ? knownDistance(value) ? Math.pow(2, -value / halfDistance) : 0
     : Number.isFinite(value) && value > 0
     ? value
     : 0;
@@ -661,7 +710,8 @@ const homeGradient = (pheromones, params, node, neighbor) => {
 
 const signalMarked = (signal, node, neighbor) =>
   signal.edgeMask === undefined ||
-  (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > 0;
+  (signal.edgeMarked?.(signal.edgeMask[edgeKey(node, neighbor)]) ??
+    (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > 0);
 
 const signalValue = (signal, node, neighbor) =>
   signalMarked(signal, node, neighbor)
@@ -701,9 +751,16 @@ const foodSignal = (pheromones, params, influence, polarity) =>
     : {
       field: pheromones.fast,
       edgeMask: pheromones.fastEdges,
+      edgeMarked: params.foodTrailModel === "distance" ? knownDistance : undefined,
       edgeField: false,
       influence,
       polarity,
+      transform: (value) =>
+        foodCloseness(
+          value,
+          params.foodTrailModel,
+          params.foodHalfDistance,
+        ),
     };
 
 const signalProbabilities = (
@@ -856,8 +913,6 @@ export const attenuateFood = (level, length, halfDistance) =>
 
 export const reinforceFood = (level, cap, rate) =>
   level + clamp(0, 1, rate) * Math.max(0, cap - level);
-
-const knownDistance = (value) => Number.isFinite(value) && value >= 0;
 
 export const relaxDistance = (nodeDistance, antDistance, edgeLength) => {
   const proposal = knownDistance(antDistance) ? antDistance + edgeLength : -1;
@@ -1112,6 +1167,7 @@ export const competitiveFoodDeposit = (
 ) => Math.max(base, share * competingLevel - level);
 
 const foodDepositAt = (node, previous, pheromones, params) => {
+  if (params.foodTrailModel === "distance") return 0;
   if (params.foodTrailModel === "potential") return 1;
   const localLevel = pheromones.fast[node] ?? 0;
   const competingLevel = previous === null ? 0 : pheromones.fast[previous] ?? 0;
@@ -1125,6 +1181,7 @@ const foodDepositAt = (node, previous, pheromones, params) => {
 
 const beginReturn = (ant, deposit, params) => {
   const potential = params.foodTrailModel === "potential";
+  const distance = params.foodTrailModel === "distance";
   return {
     ant: {
       ...ant,
@@ -1141,12 +1198,12 @@ const beginReturn = (ant, deposit, params) => {
       distance: ant.tripDistance,
       food: ant.node,
     }],
-    deposits: potential
+    deposits: potential || distance
       ? [{
         channel: "fast",
         target: ant.node,
-        amount: 1,
-        combine: "max",
+        amount: distance ? 0 : 1,
+        combine: distance ? "min-distance" : "max",
       }]
       : [],
   };
@@ -1212,6 +1269,7 @@ const arriveReturning = (ant, graph) => {
 const arrive = (ant, graph, pheromones, params) => {
   const returning = ant.mode === "return";
   const potential = params.foodTrailModel === "potential";
+  const foodDistance = params.foodTrailModel === "distance";
   const distanceArrival = params.homeSignalModel === "distance"
     ? relaxDistance(
       pheromones.slow[ant.edge.to],
@@ -1287,7 +1345,26 @@ const arrive = (ant, graph, pheromones, params) => {
       },
     ]
     : [];
-  const additiveDeposits = !potential && (homeward || foundFood)
+  const distanceSource = pheromones.fast[ant.edge.from];
+  const distanceDeposits = returning && homeward && foodDistance &&
+      knownDistance(distanceSource)
+    ? [
+      {
+        channel: "fastEdges",
+        target: edgeKey(ant.edge.from, ant.edge.to),
+        amount: distanceSource + ant.edge.length / 2,
+        combine: "min-distance",
+      },
+      {
+        channel: "fast",
+        target: ant.edge.to,
+        amount: distanceSource + ant.edge.length,
+        combine: "min-distance",
+      },
+    ]
+    : [];
+  const additiveDeposits = !potential && !foodDistance &&
+      (homeward || foundFood)
     ? [
       {
         channel: "fast",
@@ -1309,6 +1386,7 @@ const arrive = (ant, graph, pheromones, params) => {
       ...slowDeposits,
       ...result.deposits,
       ...potentialDeposits,
+      ...distanceDeposits,
       ...additiveDeposits,
     ],
   };
@@ -1598,6 +1676,8 @@ export const stepSimulation = (state, seconds) => {
 export const updateParams = (state, patch) => {
   const params = sanitizeParams({ ...state.params, ...patch });
   const homeModelChanged = params.homeSignalModel !== state.params.homeSignalModel;
+  const foodDistanceModelChanged = (params.foodTrailModel === "distance") !==
+    (state.params.foodTrailModel === "distance");
   const difference = params.antCount - state.ants.length;
   const generated = difference > 0
     ? generateAnts(
@@ -1616,10 +1696,16 @@ export const updateParams = (state, patch) => {
     ...state,
     params,
     rngSeed: generated.rngSeed,
-    pheromones: homeModelChanged
+    pheromones: homeModelChanged || foodDistanceModelChanged
       ? {
         ...state.pheromones,
-        slow: emptyHomeField(state.graph, params),
+        ...(homeModelChanged ? { slow: emptyHomeField(state.graph, params) } : {}),
+        ...(foodDistanceModelChanged
+          ? {
+            fast: emptyFoodField(state.graph, params),
+            fastEdges: emptyFoodEdgeField(state.graph, params),
+          }
+          : {}),
       }
       : state.pheromones,
     ants: homeModelChanged
@@ -1749,27 +1835,50 @@ export const setEndpoint = (state, kind, nodeId) => {
   });
 };
 
+const foodLevel = (state, value) =>
+  foodCloseness(
+    value,
+    state.params.foodTrailModel,
+    state.params.foodHalfDistance,
+  );
+
+const foodEdgeMarked = (state, node, neighbor) => {
+  const level = state.pheromones.fastEdges[edgeKey(node, neighbor)];
+  return state.params.foodTrailModel === "distance"
+    ? knownDistance(level)
+    : (level ?? 0) > EPSILON;
+};
+
 const foodLevelForMove = (state, node, neighbor) =>
   state.params.foodTrailModel === "edge"
-    ? state.pheromones.fastEdges[edgeKey(node, neighbor)] ?? 0
-    : state.pheromones.fast[neighbor] ?? 0;
+    ? foodLevel(
+      state,
+      state.pheromones.fastEdges[edgeKey(node, neighbor)],
+    )
+    : foodEdgeMarked(state, node, neighbor)
+    ? foodLevel(state, state.pheromones.fast[neighbor])
+    : 0;
 
 const activeFoodValues = (state) =>
   Object.values(
     state.params.foodTrailModel === "edge"
       ? state.pheromones.fastEdges
       : state.pheromones.fast,
-  );
+  ).map((value) => foodLevel(state, value));
 
 const routeFoodSignal = (state, route) =>
   state.params.foodTrailModel === "edge"
     ? route.slice(1).reduce(
       (sum, node, index) =>
-        sum + state.pheromones.fastEdges[edgeKey(route[index], node)],
+        sum +
+        foodLevel(
+          state,
+          state.pheromones.fastEdges[edgeKey(route[index], node)],
+        ),
       0,
     )
     : route.reduce(
-      (sum, node) => sum + state.pheromones.fast[node],
+      (sum, node) => sum + foodLevel(state, state.pheromones.fast[node]),
       0,
     );
 

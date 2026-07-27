@@ -56,6 +56,11 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
       ?.params.homeSignalModel;
   assertEquals(homeModel("balanced-node"), "pheromone");
   assertEquals(homeModel("synthetic-home-distance"), "distance");
+  const foodModel = (id) =>
+    BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
+      ?.params.foodTrailModel;
+  assertEquals(foodModel("balanced-node"), "node");
+  assertEquals(foodModel("synthetic-food-distance"), "distance");
   const homeRate = (id) =>
     BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
       ?.params.homeReinforcement;
@@ -182,6 +187,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     html.includes(`<option value="${DEFAULTS.foodTrailModel}" selected>`),
     "Food-trail selector differs from DEFAULTS",
   );
+  assert(html.includes('<option value="distance">Synthetic food distance</option>'));
   assert(
     html.includes(`<option value="${DEFAULTS.scoutLifecycle}" selected>`),
     "Scout-lifecycle selector differs from DEFAULTS",

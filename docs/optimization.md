@@ -746,6 +746,14 @@ This supports the mechanism's homing prediction while showing that a nearly full
 recruited colony still needs a better exploration reserve. **Synthetic home distance**
 is therefore exposed as a control, not promoted as a default.
 
+The first food-distance causal run slightly improved screening score from `78.50` to
+`79.44` and adaptation from `0.628` to `0.773`, with no failures and perfect signaled
+homing. On boundary stress it scored `29.56` versus the additive control's `59.18`
+because one of four graphs missed a relocated-food delivery; utilization also remained
+low at `0.614`. The local gradient is sound, but its present decay and recruitment
+settings are not robust enough to become the default. **Synthetic food distance** is
+therefore exposed as a separate control for the next tuning round.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or

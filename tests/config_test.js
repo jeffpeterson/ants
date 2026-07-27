@@ -76,6 +76,7 @@ Deno.test("new lever migration preserves explicit values and old behavior", () =
       engineId: CURRENT_ENGINE_ID,
       params: {
         speed: 0.12,
+        foodTrailModel: "distance",
         homeSignalModel: "distance",
         scoutLifecycle: "complete",
         trailJoinChance: 0.06,

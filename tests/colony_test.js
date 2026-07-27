@@ -1,5 +1,6 @@
 import {
   addFood,
+  ageFoodDistance,
   attenuateFood,
   choiceProbabilities,
   clearPheromones,
@@ -9,6 +10,7 @@ import {
   dominantFoodRoute,
   edgeKey,
   explorationStopProbability,
+  foodCloseness,
   foodProbabilitiesForNode,
   generateGraph,
   homeCloseness,
@@ -383,6 +385,250 @@ Deno.test("synthetic distance reverses raw home-field ordering locally", () => {
 
   assert(homeward[0].probability > homeward[1].probability);
   assert(exploring[1].probability > exploring[0].probability);
+});
+
+Deno.test("synthetic food distance ages into weaker local closeness", () => {
+  assertEquals(
+    parameters({ foodTrailModel: "distance" }).foodTrailModel,
+    "distance",
+  );
+  assertEquals(foodCloseness(-1, "distance", 0.5), 0);
+  assertEquals(foodCloseness(0, "distance", 0.5), 1);
+  assert(Math.abs(foodCloseness(0.5, "distance", 0.5) - 0.5) < 1e-12);
+
+  const whole = ageFoodDistance(0, 0.5, 10, 10);
+  const quarters = Array.from({ length: 4 }).reduce(
+    (distance) => ageFoodDistance(distance, 0.5, 10, 2.5),
+    0,
+  );
+  assert(Math.abs(whole - 0.5) < 1e-12);
+  assert(Math.abs(quarters - whole) < 1e-12);
+  assertEquals(ageFoodDistance(-1, 0.5, 10, 10), -1);
+  assertEquals(ageFoodDistance(0, 0.5, 10, 200), -1);
+
+  const initial = createSimulation({
+    graph: pathGraph(),
+    params: { antCount: 8, foodTrailModel: "distance" },
+  });
+  assert(Object.values(initial.pheromones.fast).every((value) => value === -1));
+  assert(
+    Object.values(initial.pheromones.fastEdges).every((value) => value === -1),
+  );
+  const aged = decayPheromones(
+    {
+      ...initial.pheromones,
+      fast: { ...initial.pheromones.fast, 2: 0 },
+      fastEdges: {
+        ...initial.pheromones.fastEdges,
+        [edgeKey(1, 2)]: 0.02,
+      },
+    },
+    initial.params,
+    initial.params.fastHalfLife,
+  );
+  assert(Math.abs(aged.fast[2] - initial.params.foodHalfDistance) < 1e-12);
+  assert(
+    Math.abs(
+      aged.fastEdges[edgeKey(1, 2)] -
+        (0.02 + initial.params.foodHalfDistance),
+    ) < 1e-12,
+  );
+});
+
+Deno.test("one carrier builds an ordered food-distance trail in one tick", () => {
+  const initial = createSimulation({
+    graph: pathGraph(),
+    runSeed: 7,
+    params: {
+      antCount: 8,
+      foodTrailModel: "distance",
+      speed: 0.65,
+      reversePenalty: 0.01,
+      headingInfluence: 4,
+      distanceInfluence: 0,
+    },
+  });
+  const stepped = stepSimulation({
+    ...initial,
+    ants: [{ ...initial.ants[0], launchDelay: 0 }],
+  }, 0.25);
+
+  assertEquals(stepped.stats.deliveries, 1);
+  assertEquals(stepped.pheromones.fast[2], 0);
+  assert(Math.abs(stepped.pheromones.fastEdges[edgeKey(1, 2)] - 0.02) < 1e-12);
+  assert(Math.abs(stepped.pheromones.fast[1] - 0.04) < 1e-12);
+  assert(Math.abs(stepped.pheromones.fastEdges[edgeKey(0, 1)] - 0.06) < 1e-12);
+  assert(Math.abs(stepped.pheromones.fast[0] - 0.08) < 1e-12);
+});
+
+Deno.test("every synthetic food distance retains a shorter marked neighbor", () => {
+  let state = testSimulation({
+    seed: 93,
+    params: {
+      antCount: 48,
+      foodTrailModel: "distance",
+      speed: 0.65,
+    },
+  });
+  for (let step = 0; step < 240; step += 1) {
+    state = stepSimulation(state, 0.25);
+    state.graph.nodes
+      .filter(({ id }) =>
+        !state.graph.foods.includes(id) && state.pheromones.fast[id] >= 0
+      )
+      .forEach(({ id }) =>
+        assert(
+          state.graph.adjacency[id].some((neighbor) =>
+            state.pheromones.fastEdges[edgeKey(id, neighbor)] >= 0 &&
+            state.pheromones.fast[neighbor] >= 0 &&
+            state.pheromones.fast[neighbor] < state.pheromones.fast[id]
+          ),
+          `Node ${id} lost its shorter food neighbor at step ${step}`,
+        )
+      );
+  }
+});
+
+Deno.test("diagnostic shortest routes cannot influence local distance fields", () => {
+  const state = run(
+    testSimulation({
+      seed: 37,
+      params: {
+        homeSignalModel: "distance",
+        foodTrailModel: "distance",
+      },
+    }),
+    120,
+  );
+  const altered = {
+    ...state,
+    stats: {
+      ...state.stats,
+      shortestDistance: 1_000,
+      shortestRoute: [...state.stats.shortestRoute].reverse(),
+    },
+  };
+  const expected = stepSimulation(state, 0.25);
+  const observed = stepSimulation(altered, 0.25);
+
+  assertEquals(observed.ants, expected.ants);
+  assertEquals(observed.pheromones, expected.pheromones);
+  assertEquals(observed.rngSeed, expected.rngSeed);
+  assertEquals(observed.lastEvents, expected.lastEvents);
+});
+
+Deno.test("synthetic food distance is deposited only from a homeward known source", () => {
+  const initial = createSimulation({
+    graph: pathGraph(),
+    params: {
+      antCount: 8,
+      foodTrailModel: "distance",
+      speed: 0.65,
+    },
+  });
+  const returning = (from, to) => ({
+    ...initial.ants[0],
+    node: from,
+    launchDelay: 0,
+    mode: "return",
+    previous: from === 1 ? 2 : 1,
+    turnAround: null,
+    edge: {
+      from,
+      to,
+      length: initial.graph.edgeById[edgeKey(from, to)].length,
+      progress: 1,
+      returnTrail: "signal",
+    },
+  });
+  const pheromones = {
+    ...initial.pheromones,
+    slow: { 0: 1, 1: 0.8, 2: 0.6 },
+  };
+  const stepCarrier = (ant, sourceDistance) =>
+    stepSimulation({
+      ...initial,
+      pheromones: {
+        ...pheromones,
+        fast: {
+          ...pheromones.fast,
+          [ant.edge.from]: sourceDistance,
+        },
+      },
+      ants: [ant],
+    }, 0.001);
+
+  const away = stepCarrier(returning(1, 2), 0.04);
+  assertEquals(away.pheromones.fastEdges[edgeKey(1, 2)], -1);
+  assertEquals(away.pheromones.fast[2], -1);
+
+  const unknown = stepCarrier(returning(1, 0), -1);
+  assertEquals(unknown.pheromones.fastEdges[edgeKey(0, 1)], -1);
+  assertEquals(unknown.pheromones.fast[0], -1);
+});
+
+Deno.test("synthetic food distance follows smaller marked endpoint values", () => {
+  const pheromones = {
+    slow: { 0: 1, 1: 0.8, 2: 0.8 },
+    slowEdges: {
+      [edgeKey(0, 1)]: 1,
+      [edgeKey(0, 2)]: 1,
+    },
+    fast: { 0: 1, 1: 0.2, 2: 0.8 },
+    fastEdges: {
+      [edgeKey(0, 1)]: 0.1,
+      [edgeKey(0, 2)]: 0.1,
+    },
+  };
+  const choices = choiceProbabilities(
+    0,
+    [1, 2],
+    pheromones,
+    parameters({
+      foodTrailModel: "distance",
+      foodHalfDistance: 0.5,
+      fastInfluence: 1,
+      outboundPolarity: 4,
+      reversePenalty: 1,
+    }),
+  );
+
+  assert(choices[0].probability > choices[1].probability);
+});
+
+Deno.test("food-distance route diagnostics reject an unmarked shortcut", () => {
+  const base = pathGraph();
+  const shortcut = { id: edgeKey(0, 2), a: 0, b: 2, length: 0.01 };
+  const graph = {
+    ...base,
+    edges: [...base.edges, shortcut],
+    adjacency: { ...base.adjacency, 0: [1, 2], 2: [1, 0] },
+    edgeById: { ...base.edgeById, [shortcut.id]: shortcut },
+  };
+  const initial = createSimulation({
+    graph,
+    params: {
+      antCount: 8,
+      foodTrailModel: "distance",
+      choiceFloor: 0,
+    },
+  });
+  const state = {
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      fast: { 0: 0.08, 1: 0.04, 2: 0 },
+      fastEdges: {
+        [edgeKey(0, 1)]: 0.06,
+        [edgeKey(1, 2)]: 0.02,
+        [edgeKey(0, 2)]: -1,
+      },
+    },
+  };
+
+  assertEquals(dominantFoodRoute(state).route, [0, 1, 2]);
+  const choices = foodProbabilitiesForNode(state, 0);
+  assertEquals(choices.find(({ node }) => node === 2).probability, 0);
 });
 
 Deno.test("bounded food potential weakens monotonically with route distance", () => {
@@ -1565,6 +1811,46 @@ Deno.test("food edits preserve the running colony", () => {
   assertEquals(JSON.stringify(warm), originalSnapshot);
 });
 
+Deno.test("moved food ages in place until its new node is encountered", () => {
+  const initial = createSimulation({
+    graph: pathGraph(),
+    params: { antCount: 8, foodTrailModel: "distance" },
+  });
+  const marked = {
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      fast: { ...initial.pheromones.fast, 2: 0 },
+    },
+  };
+  const moved = moveFood(marked, 2, 1);
+
+  assert(moved.ants === marked.ants);
+  assert(moved.pheromones === marked.pheromones);
+  assertEquals(moved.pheromones.fast[1], -1);
+  assertEquals(moved.pheromones.fast[2], 0);
+
+  const aged = run({ ...moved, ants: [] }, 4);
+  assert(
+    Math.abs(
+      aged.pheromones.fast[2] -
+        moved.params.foodHalfDistance / moved.params.fastHalfLife,
+    ) < 1e-12,
+  );
+  assertEquals(aged.pheromones.fast[1], -1);
+
+  const discovered = stepSimulation({
+    ...moved,
+    ants: [{
+      ...moved.ants[0],
+      node: 1,
+      previous: 0,
+      launchDelay: 0,
+    }],
+  }, 0.001);
+  assertEquals(discovered.pheromones.fast[1], 0);
+});
+
 Deno.test("food-trail storage switches without resetting the colony", () => {
   const warm = adaptationFixture();
   const changed = updateParams(warm, { foodTrailModel: "edge" });
@@ -1573,6 +1859,30 @@ Deno.test("food-trail storage switches without resetting the colony", () => {
   assertEquals(changed.elapsed, warm.elapsed);
   assertEquals(changed.stats, warm.stats);
   assertEquals(changed.params.foodTrailModel, "edge");
+});
+
+Deno.test("food-distance storage switches without resetting the colony", () => {
+  const warm = adaptationFixture();
+  const distance = updateParams(warm, { foodTrailModel: "distance" });
+
+  assert(distance.ants === warm.ants);
+  assert(distance.pheromones.slow === warm.pheromones.slow);
+  assertEquals(distance.elapsed, warm.elapsed);
+  assertEquals(distance.stats, warm.stats);
+  assert(Object.values(distance.pheromones.fast).every((value) => value === -1));
+  assert(
+    Object.values(distance.pheromones.fastEdges).every((value) => value === -1),
+  );
+
+  const additive = updateParams(distance, { foodTrailModel: "node" });
+  assert(additive.ants === distance.ants);
+  assert(additive.pheromones.slow === distance.pheromones.slow);
+  assertEquals(additive.elapsed, distance.elapsed);
+  assertEquals(additive.stats, distance.stats);
+  assert(Object.values(additive.pheromones.fast).every((value) => value === 0));
+  assert(
+    Object.values(additive.pheromones.fastEdges).every((value) => value === 0),
+  );
 });
 
 Deno.test("home-signal models switch without resetting ant movement", () => {
