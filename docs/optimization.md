@@ -109,11 +109,13 @@ selecting slider values:
 3. **One-junction exploration may improve steady throughput but hurt initial
    discovery.** It will be evaluated as a countermodel, not assumed superior: the
    playground deliberately permits multi-edge random walks after an ant enters scouting.
-4. **Edge food pheromone would probably improve route identification, but is excluded
-   from this optimization.** Classical ant-colony optimization commonly stores pheromone
-   per edge, while this playground intentionally stores scalar node fields and derives
-   visible edge polarity from endpoint levels. Changing that invariant requires an
-   explicit product decision, not an optimizer side effect.
+4. **Undirected edge food pheromone will probably improve route identification and is
+   now an explicit countermodel.** Classical ant-colony optimization commonly stores
+   pheromone per edge. A hybrid can retain the scalar node-based persistent hill field
+   while putting the food trail on undirected edges. An ant would still read only its
+   incident options, and the stored signal would contain no direction. This model must
+   beat the node model on held-out effectiveness—not merely produce a cleaner-looking
+   trail—before replacing it.
 5. **Trip-quality reinforcement is also excluded.** Scaling deposits by a completed
    route's length would give strong artificial-ACO feedback, but requires personal
    odometry or route memory beyond the local pheromone-only decision model.
