@@ -1,3 +1,5 @@
+import { CURRENT_ENGINE_ID } from "./colony.js";
+
 export const ALGORITHM_KEYS = Object.freeze([
   "antCount",
   "exploreRate",
@@ -29,8 +31,41 @@ export const GRAPH_KEYS = Object.freeze([
 export const selectParameters = (params, keys) =>
   Object.fromEntries(keys.map((key) => [key, params[key]]));
 
-export const algorithmPreset = (simulation) =>
-  selectParameters(simulation.params, ALGORITHM_KEYS);
+const isRecord = (value) =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const isEngineAlgorithm = (value) =>
+  isRecord(value) &&
+  typeof value.engineId === "string" &&
+  value.engineId !== "" &&
+  isRecord(value.params);
+
+export const migrateAlgorithmPreset = (value) => {
+  if (!isRecord(value)) return null;
+  const tagged = Object.hasOwn(value, "engineId") ||
+    Object.hasOwn(value, "params");
+  if (tagged) {
+    return isEngineAlgorithm(value)
+      ? { engineId: value.engineId, params: value.params }
+      : null;
+  }
+  return { engineId: CURRENT_ENGINE_ID, params: value };
+};
+
+export const migrateAlgorithmPresetLibrary = (value) =>
+  isRecord(value)
+    ? Object.fromEntries(
+      Object.entries(value).flatMap(([name, preset]) => {
+        const migrated = migrateAlgorithmPreset(preset);
+        return migrated === null ? [] : [[name, migrated]];
+      }),
+    )
+    : {};
+
+export const algorithmPreset = (simulation) => ({
+  engineId: simulation.engineId,
+  params: selectParameters(simulation.params, ALGORITHM_KEYS),
+});
 
 export const mapPreset = (simulation) => ({
   seed: simulation.graphSeed,
@@ -40,7 +75,7 @@ export const mapPreset = (simulation) => ({
 });
 
 export const sharedConfiguration = (simulation) => ({
-  version: 1,
+  version: 2,
   algorithm: algorithmPreset(simulation),
   map: mapPreset(simulation),
 });
@@ -59,16 +94,31 @@ const fromBase64Url = (value) => {
 export const encodeConfiguration = (configuration) =>
   base64Url(JSON.stringify(configuration));
 
+const validMap = (map) =>
+  Number.isFinite(map?.seed) &&
+  isRecord(map.params);
+
+export const migrateConfiguration = (configuration) => {
+  if (!isRecord(configuration) || !validMap(configuration.map)) return null;
+  if (configuration.version === 1) {
+    const algorithm = migrateAlgorithmPreset(configuration.algorithm);
+    return algorithm === null ? null : { ...configuration, version: 2, algorithm };
+  }
+  if (configuration.version !== 2 || !isEngineAlgorithm(configuration.algorithm)) {
+    return null;
+  }
+  return {
+    ...configuration,
+    algorithm: {
+      engineId: configuration.algorithm.engineId,
+      params: configuration.algorithm.params,
+    },
+  };
+};
+
 export const decodeConfiguration = (value) => {
   try {
-    const configuration = JSON.parse(fromBase64Url(value));
-    const valid = configuration?.version === 1 &&
-      configuration.algorithm !== null &&
-      typeof configuration.algorithm === "object" &&
-      Number.isFinite(configuration.map?.seed) &&
-      configuration.map.params !== null &&
-      typeof configuration.map.params === "object";
-    return valid ? configuration : null;
+    return migrateConfiguration(JSON.parse(fromBase64Url(value)));
   } catch {
     return null;
   }

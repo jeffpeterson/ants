@@ -17,6 +17,7 @@ import {
   decodeConfiguration,
   encodeConfiguration,
   mapPreset,
+  migrateAlgorithmPresetLibrary,
   sharedConfiguration,
 } from "./config.js";
 import { CONTROL_HELP } from "./help.js";
@@ -46,7 +47,7 @@ const sharedHash = location.hash.startsWith("#state=")
   : null;
 const initialSeed = sharedHash?.map.seed ?? readSeed();
 const initialParams = {
-  ...sharedHash?.algorithm,
+  ...sharedHash?.algorithm.params,
   ...sharedHash?.map.params,
 };
 byId("seed").value = initialSeed;
@@ -901,7 +902,9 @@ const writePresetLibrary = (key, library) => {
 
 const ALGORITHM_PRESET_KEY = "formic.algorithm-presets.v1";
 const MAP_PRESET_KEY = "formic.map-presets.v1";
-let algorithmPresets = readPresetLibrary(ALGORITHM_PRESET_KEY);
+let algorithmPresets = migrateAlgorithmPresetLibrary(
+  readPresetLibrary(ALGORITHM_PRESET_KEY),
+);
 let mapPresets = readPresetLibrary(MAP_PRESET_KEY);
 
 const selectedAlgorithmPreset = () => {

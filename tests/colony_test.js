@@ -511,14 +511,16 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
   });
   const algorithm = algorithmPreset(simulation);
   const map = mapPreset(simulation);
-  assertEquals(algorithm.outboundPolarity, -2);
-  assertEquals(algorithm.foodTrailModel, "edge");
-  assert(!Object.hasOwn(algorithm, "mapVariation"));
+  assertEquals(algorithm.engineId, simulation.engineId);
+  assertEquals(algorithm.params.outboundPolarity, -2);
+  assertEquals(algorithm.params.foodTrailModel, "edge");
+  assert(!Object.hasOwn(algorithm.params, "mapVariation"));
   assertEquals(map.params.mapVariation, 0.9);
   assert(!Object.hasOwn(map.params, "outboundPolarity"));
   assert(!Object.hasOwn(map.params, "islandCount"));
 
   const configuration = sharedConfiguration(simulation);
+  assertEquals(configuration.version, 2);
   assertEquals(
     decodeConfiguration(encodeConfiguration(configuration)),
     configuration,

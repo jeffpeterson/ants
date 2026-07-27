@@ -1,16 +1,22 @@
-import { DEFAULTS } from "./colony.js";
-import { ALGORITHM_KEYS, selectParameters } from "./config.js";
+import { CURRENT_ENGINE_ID, DEFAULTS } from "./colony.js";
+import { ALGORITHM_KEYS, migrateAlgorithmPreset, selectParameters } from "./config.js";
 
 const completeAlgorithm = (overrides = {}) =>
   Object.freeze(
     selectParameters({ ...DEFAULTS, ...overrides }, ALGORITHM_KEYS),
   );
 
+const resolveParameters = (algorithm) =>
+  algorithm.engineId === CURRENT_ENGINE_ID
+    ? completeAlgorithm(algorithm.params)
+    : Object.freeze({ ...algorithm.params });
+
 const builtIn = (id, name, description, overrides = {}) =>
   Object.freeze({
     id,
     name,
     description,
+    engineId: CURRENT_ENGINE_ID,
     params: completeAlgorithm(overrides),
   });
 
@@ -96,10 +102,13 @@ export const resolveAlgorithmPreset = (value, userLibrary = {}) => {
   ) {
     return null;
   }
+  const algorithm = migrateAlgorithmPreset(userLibrary[reference.key]);
+  if (algorithm === null) return null;
   return {
     id: reference.key,
     name: reference.key,
     description: "Saved in this browser.",
-    params: completeAlgorithm(userLibrary[reference.key]),
+    engineId: algorithm.engineId,
+    params: resolveParameters(algorithm),
   };
 };

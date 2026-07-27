@@ -1,4 +1,4 @@
-import { DEFAULTS } from "../src/colony.js";
+import { CURRENT_ENGINE_ID, DEFAULTS } from "../src/colony.js";
 import { ALGORITHM_KEYS, selectParameters } from "../src/config.js";
 import {
   BUILT_IN_ALGORITHM_PRESETS,
@@ -27,6 +27,7 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
   BUILT_IN_ALGORITHM_PRESETS.forEach((preset) => {
     assert(Object.isFrozen(preset));
     assert(Object.isFrozen(preset.params));
+    assertEquals(preset.engineId, CURRENT_ENGINE_ID);
     assertEquals(
       Object.keys(preset.params).toSorted(),
       [...ALGORITHM_KEYS].toSorted(),
@@ -54,6 +55,10 @@ Deno.test("built-ins and user presets resolve independently", () => {
   const builtIn = BUILT_IN_ALGORITHM_PRESETS[0];
   const users = {
     [builtIn.name]: { exploreRate: 0.2 },
+    tagged: {
+      engineId: "another-engine",
+      params: { exploreRate: 0.1 },
+    },
   };
   const resolvedBuiltIn = resolveAlgorithmPreset(
     presetRef("builtin", builtIn.id),
@@ -63,11 +68,16 @@ Deno.test("built-ins and user presets resolve independently", () => {
     presetRef("user", builtIn.name),
     users,
   );
+  const resolvedTagged = resolveAlgorithmPreset("user:tagged", users);
 
   assertEquals(resolvedBuiltIn, builtIn);
   assertEquals(resolvedUser.name, builtIn.name);
+  assertEquals(resolvedUser.engineId, CURRENT_ENGINE_ID);
   assertEquals(resolvedUser.params.exploreRate, 0.2);
   assertEquals(resolvedUser.params.foodTrailModel, DEFAULTS.foodTrailModel);
+  assertEquals(resolvedTagged.engineId, "another-engine");
+  assertEquals(resolvedTagged.params.exploreRate, 0.1);
+  assert(!Object.hasOwn(resolvedTagged.params, "foodTrailModel"));
   assertEquals(resolveAlgorithmPreset("builtin:missing", users), null);
 });
 
