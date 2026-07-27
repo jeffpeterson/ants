@@ -33,35 +33,62 @@ The colony maintains two fields:
   strength increases with route distance from the hill, so the field has an explicit
   foodward gradient.
 
-Before any food signal reaches the hill, ants use staggered local wait timers to take
-turns on finite discovery tours. An exploring ant prefers locally uncovered, unvisited
-edges:
+At the beginning of a run, every ant immediately starts a finite discovery tour. An
+exploring ant prefers locally uncovered, unvisited edges:
 
 ```text
 exploreWeight(u, v) =
   base / (1 + slowAvoidance · (slow[u → v] + slow[v → u])^α)
 ```
 
-Other ants wait at the hill until a locally usable food signal exists, then sample
-adjacent arcs by `base + fastInfluence · fast[u → v]^β`. Signal weaker than the baseline
-choice weight is treated as expired. Once a trail exists, every ant has a local chance
-at each junction to enter a bounded three-edge exploration burst. This is a temporary
-“try another way” decision, not a permanent scout identity.
+Once a locally usable food signal exists, ants sample adjacent arcs with a linear
+pheromone response and a local edge-length heuristic:
 
-At a normal trail junction, the marginal choice is
-`(1 - exploreRate) · foodDistribution + exploreRate · coverageDistribution`.
+```text
+followWeight(u, v) =
+  (base + fastInfluence · fast[u → v]) / edgeLength(u, v)^distanceInfluence
+```
 
-A successful probe rejoins the food signal. A failed probe retraces its own breadcrumbs
-to its branch point; an exhausted discovery tour or stale trail retraces to the hill.
-This latched recovery prevents ants from oscillating at the end of obsolete signal. Food
+At each later junction, an ant has an independent `exploreRate` chance to try one
+less-covered edge, then immediately re-evaluates the food signal. This is a temporary
+“try this way” choice, not a permanent scout identity. A failed choice reverses over
+that edge; an exhausted discovery tour or stale trail retraces to the hill. Food
 carriers follow adjacent hillward coverage arcs that monotonically move backward through
 their own loop-erased breadcrumbs; the immediately previous breadcrumb is the guaranteed
 fallback.
 
 No routing decision reads the precomputed shortest route, graph-wide distance, or node
 coordinates. Ants inspect only adjacent signals and their own route memory. The
-shortest-path calculation is display-only. Short routes win because their ants return
-and reinforce them more often.
+shortest-path calculation is display-only. A carrier deposits `Q / L`, where `L` is the
+length of its own completed outbound trip. This is the Ant System's route-quality
+update, and it compounds the natural throughput advantage: equal-speed ants complete
+shorter round trips more often. Pheromone response remains linear so an early adequate
+route cannot turn a small signal lead into an irreversible superlinear lock-in.
+
+## Model invariants
+
+- Every ant leaves at the start; later exploration is a one-choice behavior, never a
+  permanent caste.
+- Only a successful carrier lays food signal, and only while traveling toward the hill.
+- Coverage arcs point toward the hill; food arcs point toward food.
+- Decisions use adjacent edge length and pheromone, the ant's own loop-free breadcrumbs
+  and completed-trip length, and seeded randomness. They never use a global route.
+- Ant speed is constant in physical graph units. Long edges and routes take
+  proportionally longer to traverse.
+- Evaporation, rather than a hard pheromone ceiling, keeps signals finite and lets stale
+  routes lose influence.
+
+## Research basis
+
+The implementation draws on the trail renewal and evaporation behavior summarized in
+[Trail pheromone](https://en.wikipedia.org/wiki/Trail_pheromone), the locally
+proportional response measured by
+[Perna et al.](https://doi.org/10.1371/journal.pcbi.1002592), and the linear-flow
+conditions studied by [Garg et al.](https://doi.org/10.1073/pnas.2207959120). The
+`Q / L` update and adjacent-edge visibility follow the original
+[Ant System](https://doi.org/10.1109/3477.484436). The long-lived channel remains an
+explicit coverage breadcrumb in this playground rather than claiming to reproduce a
+particular ant species' exploration pheromone.
 
 Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
 fields. Returning ants finish trips from retired sources while old signals evaporate.

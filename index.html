@@ -61,7 +61,7 @@
 
         <div class="stage-footer">
           <p id="stage-status">
-            Exploring ants are laying hillward breadcrumbs. Others await food signal.
+            The whole colony is exploring and laying hillward breadcrumbs.
           </p>
           <dl>
             <div>
@@ -110,7 +110,7 @@
           </div>
           <dl class="metrics">
             <div>
-              <dt>Best route</dt>
+              <dt>Leading trail</dt>
               <dd id="best-distance">—</dd>
               <small><span id="best-hops">—</span> hops</small>
             </div>
@@ -224,7 +224,8 @@
             <p id="food-action-help" class="action-help"></p>
             <ol id="probabilities" class="probabilities"></ol>
             <p id="probability-empty" class="muted">
-              No usable food signal here. An ant waits or follows its breadcrumbs home.
+              No usable food signal here. A searching ant explores; a carrier
+              follows its breadcrumbs home.
             </p>
           </div>
         </section>
@@ -241,20 +242,20 @@
             <p>
               Exploring ants mark the reverse arc of each crossing, creating a
               local breadcrumb field toward the hill. Before food is known,
-              ants take turns making finite discovery tours on less-covered,
-              unvisited local edges. Others wait for foodward signal.
+              every ant immediately starts a finite discovery tour on
+              less-covered, unvisited local edges.
               A carrier follows adjacent hillward coverage along its own
               loop-free breadcrumbs and lays food signal on the opposite arc.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
               On later trips every ant normally samples the foodward
-              distribution, but can briefly try a less-covered branch before
-              returning to the signal. Failed attempts retrace their own
-              breadcrumbs. There is no permanent scout caste.
-              Short routes receive more deposits per minute because equal-speed
-              ants finish more round trips. Add or move food and the old signal
-              will fade while the uninterrupted colony adapts.
+              distribution linearly, but can occasionally try one less-covered
+              edge and re-evaluate at the next node. There is no permanent scout
+              caste. A returning ant scales its deposit by the length of its own
+              completed trip; equal-speed ants also finish more short trips per
+              minute. Add or move food and the old signal will fade while the
+              uninterrupted colony adapts.
             </p>
           </div>
         </details>

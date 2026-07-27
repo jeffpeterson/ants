@@ -4,6 +4,7 @@ import {
   choiceProbabilities,
   createSimulation,
   decayPheromones,
+  dominantFoodRoute,
   edgeKey,
   foodDepositForReturn,
   foodProbabilitiesForNode,
@@ -96,7 +97,6 @@ Deno.test("trail choices follow pheromone while exploration ignores it", () => {
     slowAvoidance: 0,
     slowExponent: 1,
     fastInfluence: 3,
-    fastExponent: 1,
   };
   const worker = choiceProbabilities(
     0,
@@ -111,7 +111,13 @@ Deno.test("trail choices follow pheromone while exploration ignores it", () => {
     params,
     true,
   );
-  assert(worker[1].probability > worker[0].probability * 10);
+  const expectedRatio = (0.05 + 3 * 2) / (0.05 + 3 * 0.1);
+  assert(
+    Math.abs(
+      worker[1].probability / worker[0].probability - expectedRatio,
+    ) < 1e-9,
+    "Food pheromone response must remain linear",
+  );
   assertEquals(exploring.map(({ probability }) => probability), [0.5, 0.5]);
 });
 
@@ -121,7 +127,6 @@ Deno.test("coverage steers exploration while trail choices respond only to food"
     slowAvoidance: 1,
     slowExponent: 1,
     fastInfluence: 1,
-    fastExponent: 1,
   };
   const covered = {
     slow: {
@@ -150,29 +155,34 @@ Deno.test("coverage steers exploration while trail choices respond only to food"
   assert(attracted[1].probability > 0.9);
 });
 
-Deno.test("only temporary explorers leave before a food signal exists", () => {
+Deno.test("the whole colony starts finite discovery tours immediately", () => {
   const initial = createSimulation({ seed: 41 });
   const started = stepSimulation(initial, 1 / 30);
   const moving = started.ants.filter(({ edge }) => edge !== null);
-  assert(moving.length > 0);
+  assertEquals(moving.length, initial.ants.length);
   assert(
     moving.every(({ searchState, edge }) =>
-      searchState.kind === "explore" && edge.exploring
+      searchState.kind === "explore" &&
+      searchState.left >= 0 &&
+      edge.exploring
     ),
   );
 });
 
-Deno.test("early food signal stays on a bounded set of routes", () => {
-  const initial = createSimulation({ seed: 1837 });
-  const afterThirtySeconds = Array.from({ length: 900 }).reduce(
-    (state) => stepSimulation(state, 1 / 30),
-    initial,
-  );
-  const fastValues = Object.values(afterThirtySeconds.pheromones.fast);
-  const activeArcs = fastValues.filter((value) => value > 0.01).length;
+Deno.test("dominant trails favor near-shortest routes across graph seeds", () => {
+  const ratios = Array.from({ length: 12 }, (_, seed) => {
+    const initial = createSimulation({ seed: seed + 1 });
+    const final = Array.from({ length: 720 }).reduce(
+      (state) => stepSimulation(state, 0.25),
+      initial,
+    );
+    const dominant = dominantFoodRoute(final);
+    assert(dominant !== null, `Seed ${seed + 1} has no complete food trail`);
+    return dominant.distance / final.stats.shortestDistance;
+  });
   assert(
-    activeArcs / fastValues.length < 0.35,
-    `Food signal spread to ${activeArcs}/${fastValues.length} arcs`,
+    ratios.filter((ratio) => ratio <= 1.1).length >= 9,
+    `Dominant route ratios: ${ratios.map((ratio) => ratio.toFixed(3))}`,
   );
 });
 
@@ -194,7 +204,7 @@ Deno.test("faint residue is not mistaken for a usable food trail", () => {
   assert(foodProbabilitiesForNode(withFast(1), node).length > 0);
 });
 
-Deno.test("temporary probes correct an established longer route", () => {
+Deno.test("temporary one-edge choices either rejoin signal or retrace", () => {
   const initial = createSimulation({ seed: 1 });
   const runChecked = (start, count) =>
     Array.from({ length: count }).reduce(
@@ -228,22 +238,15 @@ Deno.test("temporary probes correct an established longer route", () => {
       },
       { state: start, sawBacktrack: false },
     );
-  const firstMinute = runChecked(initial, 1_800);
-  const lastTwoMinutes = runChecked(firstMinute.state, 3_600);
-  const middle = firstMinute.state;
-  const final = lastTwoMinutes.state;
-
-  assert(
-    middle.stats.bestDistance > middle.stats.shortestDistance * 1.1,
-    "Fixture should first reinforce a route at least 10% too long",
-  );
+  const result = runChecked(initial, 5_400);
+  const final = result.state;
   assert(
     Math.abs(final.stats.bestDistance - final.stats.shortestDistance) < 1e-9,
-    "Expected local probes to find a shorter route after convergence",
+    "Expected local exploration to find the shortest route",
   );
   assert(
-    firstMinute.sawBacktrack || lastTwoMinutes.sawBacktrack,
-    "Expected a failed probe to retrace its breadcrumbs",
+    result.sawBacktrack,
+    "Expected a failed one-edge choice to retrace its breadcrumb",
   );
   assert(
     final.ants.every(({ exploreChoices, followChoices }) =>
@@ -252,19 +255,10 @@ Deno.test("temporary probes correct an established longer route", () => {
     "Every ant should alternate between exploring and following",
   );
 
-  const hill = final.graph.hill;
-  const bestHop = final.stats.shortestRoute[1];
-  const bestSignal = final.pheromones.fast[arcKey(hill, bestHop)];
-  const alternativeSignals = final.graph.adjacency[hill]
-    .filter((node) => node !== bestHop)
-    .map((node) => final.pheromones.fast[arcKey(hill, node)]);
-  assert(
-    bestSignal > Math.max(...alternativeSignals),
-    "Expected traffic to shift to the corrected hill branch",
-  );
+  assert(dominantFoodRoute(final) !== null);
 });
 
-Deno.test("return deposit points toward food and becomes stronger along the gradient", () => {
+Deno.test("return deposit encodes food direction, gradient, and completed-trip length", () => {
   const graph = {
     edgeById: {
       [edgeKey(0, 1)]: { length: 1 },
@@ -282,12 +276,18 @@ Deno.test("return deposit points toward food and becomes stronger along the grad
     returnIndex: 1,
     edge: { from: 1, to: 0 },
   };
+  const longerTripAnt = { ...nearFoodAnt, tripDistance: 4 };
   const params = { fastDeposit: 1, foodGradientFloor: 0.25 };
   const nearFood = foodDepositForReturn(nearFoodAnt, graph, params);
   const nearHill = foodDepositForReturn(nearHillAnt, graph, params);
+  const longerTrip = foodDepositForReturn(longerTripAnt, graph, params);
   assertEquals(nearFood.key, arcKey(1, 2));
   assertEquals(nearHill.key, arcKey(0, 1));
   assert(nearFood.amount > nearHill.amount);
+  assert(
+    nearFood.amount > longerTrip.amount,
+    "An ant's shorter completed trip should deposit more food signal",
+  );
 });
 
 Deno.test("simulation transitions are immutable and eventually deliver food", () => {

@@ -172,7 +172,7 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "Exploring ants are laying hillward breadcrumbs. Others await food signal.";
+    return "The whole colony is exploring and laying hillward breadcrumbs.";
   }
   if (metrics.deliveries === 0) {
     return "Food found. Returning ants are laying a directed signal.";
@@ -190,8 +190,11 @@ const renderMetrics = (current) => {
   const metrics = deriveMetrics(current.simulation);
   setText("delivery-count", metrics.deliveries);
   setText("returning-count", metrics.returning);
-  setText("best-distance", formatDistance(metrics.bestDistance));
-  setText("best-hops", metrics.bestDistance === null ? "—" : metrics.bestHops);
+  setText("best-distance", formatDistance(metrics.selectedDistance));
+  setText(
+    "best-hops",
+    metrics.selectedDistance === null ? "—" : metrics.selectedHops,
+  );
   setText("efficiency", formatPercent(metrics.efficiency));
   setText("signal-focus", formatPercent(metrics.signalFocus));
   setText(
