@@ -604,6 +604,20 @@ measurements, retune follower release, evaluate diminishing deposits, then intro
 finite and spawning food. Every stage must retain the local home-potential invariant and
 pass fresh browser-cadence and boundary scenarios before changing the default.
 
+### Follower-floor experiment plan
+
+The scout-lifecycle mechanism and follower floor may interact: retiring exhausted scouts
+increases useful traffic, while a floor may prevent that traffic from remaining locked
+to stale food marks. Test the zero-floor control and `0.5%`, `1%`, `2%`, `5%`, and `10%`
+relative unmarked-branch weights as a factorial with the deployed and completed scout
+lifecycles.
+
+Promote only a combination that improves moved-food adaptation and seed floor without
+introducing a failed graph or materially reducing static throughput, route efficiency,
+productive utilization, cycle participation, trail coherence, or signaled homing.
+Screening and stress select finalists; validation, fresh confirmation, and browser
+cadence decide promotion.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or
