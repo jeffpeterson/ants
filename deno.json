@@ -1,5 +1,6 @@
 {
   "tasks": {
+    "benchmark": "deno run --allow-write tools/benchmark.js",
     "dev": "deno run --allow-read --allow-net dev.ts",
     "evaluate": "deno run --allow-read=. --allow-write=. tools/evaluate.js",
     "optimize": "deno run --allow-write=. tools/optimize.js",
