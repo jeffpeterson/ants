@@ -1,6 +1,10 @@
 import { CURRENT_BENCHMARK_ENGINE } from "./current.js";
+import { HISTORICAL_BENCHMARK_ENGINES } from "./historical.js";
 
-export const BENCHMARK_ENGINES = Object.freeze([CURRENT_BENCHMARK_ENGINE]);
+export const BENCHMARK_ENGINES = Object.freeze([
+  CURRENT_BENCHMARK_ENGINE,
+  ...HISTORICAL_BENCHMARK_ENGINES,
+]);
 
 const enginesById = Object.freeze(
   Object.fromEntries(BENCHMARK_ENGINES.map((engine) => [engine.id, engine])),

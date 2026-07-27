@@ -117,6 +117,7 @@ const adapterSummary = (adapter) => ({
   revision: adapter.revision ?? null,
   family: adapter.family ?? null,
   defaults: adapter.defaults ?? null,
+  capabilities: adapter.capabilities ?? null,
 });
 
 const validateAdapter = (adapter) => {

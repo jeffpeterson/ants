@@ -3,6 +3,9 @@ import {
   graphFingerprint,
   runHistoricalBenchmark,
 } from "../src/benchmark.js";
+import { HISTORICAL_BENCHMARK_ENGINES } from "../src/benchmarks/historical.js";
+import { BENCHMARK_ENGINES, getBenchmarkEngine } from "../src/benchmarks/registry.js";
+import { HISTORICAL_ENGINES } from "../src/engines/historical/engines.js";
 
 const assert = (condition, message = "Assertion failed") => {
   if (!condition) throw new Error(message);
@@ -254,4 +257,105 @@ Deno.test("benchmark contracts reject ambiguous registries and scenarios", () =>
       }),
     "must be an unsigned 32-bit integer",
   );
+});
+
+Deno.test("benchmark registry includes every historical engine and its provenance", () => {
+  assert(Object.isFrozen(BENCHMARK_ENGINES));
+  assert(Object.isFrozen(HISTORICAL_BENCHMARK_ENGINES));
+  assertEquals(BENCHMARK_ENGINES.map(({ id }) => id), [
+    "scalar-field",
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "B0",
+    "B1",
+  ]);
+  HISTORICAL_BENCHMARK_ENGINES.forEach((engine, index) => {
+    const source = HISTORICAL_ENGINES[index];
+    assert(getBenchmarkEngine(engine.id) === engine);
+    assertEquals(engine.revision, source.revision);
+    assert(engine.capabilities === source.capabilities);
+    assert(Object.isFrozen(engine.capabilities));
+    assertEquals(engine.capabilities.commonGraph, true);
+    assertEquals(engine.capabilities.nativeGraph, true);
+  });
+});
+
+Deno.test("all historical engines complete one paired common benchmark run", () => {
+  const commonScenario = {
+    ...scenario(),
+    graphSnapshot: graph(0.2),
+    shortestDistance: 0.2,
+  };
+  const report = runHistoricalBenchmark({
+    engines: HISTORICAL_BENCHMARK_ENGINES,
+    scenarios: [commonScenario],
+    lanes: ["common"],
+    runSeeds: [10],
+    resources: { antCount: 8, speed: 0.3 },
+    dt: 0.25,
+  });
+
+  assertEquals(
+    report.lanes.common.engines.map(({ engine }) => engine.id),
+    ["A0", "A1", "A2", "A3", "A4", "B0", "B1"],
+  );
+  assertEquals(
+    report.provenance.engines.map(({ id, revision, capabilities }) => ({
+      id,
+      revision,
+      capabilities,
+    })),
+    HISTORICAL_BENCHMARK_ENGINES.map(({ id, revision, capabilities }) => ({
+      id,
+      revision,
+      capabilities,
+    })),
+  );
+  report.lanes.common.engines.forEach(({ engine, scenarios }) => {
+    const adapter = getBenchmarkEngine(engine.id);
+    const [result] = scenarios;
+    const [run] = result.runs;
+
+    assertEquals(engine.revision, adapter.revision);
+    assertEquals(engine.capabilities, adapter.capabilities);
+    assertEquals(run.runSeed, 10);
+    assertEquals(run.graph.fingerprint, result.commonGraph.fingerprint);
+    assert(Number.isInteger(run.visible.deliveries));
+    assert(Number.isInteger(run.steady.deliveries));
+  });
+});
+
+Deno.test("historical benchmark inspection reads cumulative counters exactly", () => {
+  const graphSnapshot = freezeGraphSnapshot(graph(0.2));
+  HISTORICAL_BENCHMARK_ENGINES.forEach((adapter) => {
+    const initial = adapter.initialize({
+      lane: "common",
+      graphSnapshot,
+      graphSeed: 17,
+      graphParams: { nodeCount: 2, density: 0.1 },
+      runSeed: 10,
+      resources: { antCount: 8, speed: 0.3 },
+    });
+    const next = adapter.step(initial, 0.25);
+    const observation = adapter.inspect(next);
+    const native = adapter.initialize({
+      lane: "native",
+      graphSnapshot,
+      graphSeed: 17,
+      graphParams: { nodeCount: 8, density: 0.1 },
+      runSeed: 10,
+      resources: { antCount: 8, speed: 0.3 },
+    });
+
+    assertEquals(initial.adapter.lane, "common");
+    assertEquals(native.adapter.lane, "native");
+    assert(native.graph.nodes.length > graphSnapshot.nodes.length);
+    assertEquals(observation.elapsed, next.elapsed);
+    assertEquals(observation.deliveries, next.stats.deliveries);
+    assertEquals(observation.shortestDistance, next.stats.shortestDistance);
+    assert(observation.graph === next.graph);
+  });
 });
