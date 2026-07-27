@@ -24,7 +24,18 @@ deno task evaluate
 deno task optimize -- --out=.runs/colony-search.json
 ```
 
-## Algorithm
+Run every historical engine on the same current graph fixtures, then summarize the
+existing report without rerunning it:
+
+```sh
+deno task benchmark -- \
+  --lane=common \
+  --run-seeds=90001,194730,299459,404188,508917 \
+  --out=.runs/historical-common.json
+deno task benchmark:summary -- --input=.runs/historical-common.json
+```
+
+## Current algorithm
 
 The generator blends an even low-discrepancy layout toward increasingly loose, clustered
 placement, then builds a minimum-length connected backbone and adds seeded local or
@@ -104,7 +115,7 @@ On every simulation update a scout has an adjustable per-second chance to stop s
 This memoryless exit rule is stable across animation frame rates and stores no step
 count, timer, route, or visited set.
 
-## Model invariants
+## Current-engine invariants
 
 - Persistent pheromone is one scalar per node. Food pheromone is either one scalar per
   node or per undirected edge, never a stored direction. Renderer arrows exist only for
@@ -126,6 +137,30 @@ count, timer, route, or visited set.
   bottlenecks never become disconnected components.
 - Food edits preserve the running ants and both fields. Old food signal evaporates while
   the colony searches for the new source.
+
+## Historical engines
+
+The engine selector runs seven behavior-changing revisions, A0–A4 and B0–B1, inside the
+latest playground. Switching engines preserves the exact current graph, hill, and placed
+food, but resets ants and trails because their state schemas are incompatible.
+Historical source files are byte-checked against their Git blobs.
+
+The selector starts each revision from its archived behavioral defaults while retaining
+only shared resources such as ant count and speed. Unsupported current-engine controls
+are disabled. A0 supports one active food: additional sources remain visibly parked, and
+moving the active source reproduces A0's reset behavior.
+
+The five-seed common-graph screen found:
+
+- A4 (`3d6fd02`) was the overall throughput leader, but it uses a loop-erased personal
+  route and is therefore ineligible as the pheromone-only default.
+- B0 (`97a4679`) was the highest-throughput strict-local candidate, but it usually
+  collapsed on the sparse 160-node fixture.
+- The current scalar-field engine remained the robust strict-local default because it
+  delivered in every steady window.
+
+See the [historical benchmark protocol and results](docs/historical-benchmarks.md) for
+the complete paired table, hypotheses, commands, and limitations.
 
 ## Research basis
 
@@ -158,14 +193,16 @@ The [evaluation and optimization protocol](docs/optimization.md) defines effecti
 locks parameter hypotheses before experimentation, and separates training maps from
 held-out validation.
 
-Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
-fields. Returning ants finish trips from retired sources while old signals evaporate.
-The default balanced node-trail algorithm was selected by the reproducible evaluator.
-Built-in presets retain that configuration, an adaptive edge-trail candidate, and the
-pre-optimization baseline. Personal algorithm presets and map presets remain separate in
-browser storage. Loading any algorithm preserves the live ants and trails.
+On the current engine, moving, adding, or removing food preserves ants, elapsed time,
+and both pheromone fields. Returning ants finish trips from retired sources while old
+signals evaporate. The default balanced node-trail algorithm was selected by the
+reproducible evaluator. Built-in presets retain that configuration, an adaptive
+edge-trail candidate, and the pre-optimization baseline. Personal algorithm presets and
+map presets remain separate in browser storage. Loading a preset for the active engine
+preserves live ants and trails; loading a preset for another engine performs the same
+graph-preserving colony reset as the engine selector.
 
-The active algorithm, deterministic map recipe, hill, and food locations are also
-encoded in the URL hash for reproducible sharing. All simulation functions return new
-state, seeded randomness is threaded through each transition, and the renderer only
-reads snapshots.
+The active engine, its parameters, deterministic map recipe, hill, and food locations
+are also encoded in the URL hash for reproducible sharing. All simulation functions
+return new state, seeded randomness is threaded through each transition, and the
+renderer only reads snapshots.
