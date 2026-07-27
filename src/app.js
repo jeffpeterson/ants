@@ -557,11 +557,11 @@ const trailStyle = (channel) =>
       width: (intensity) => 1 + intensity * 5.2,
     }
     : {
-      color: "#315cf5",
-      faint: "rgba(49, 92, 245, 0.06)",
-      strong: (intensity) => `rgba(49, 92, 245, ${0.28 + intensity * 0.58})`,
+      color: "#2f9e44",
+      faint: "rgba(47, 158, 68, 0.06)",
+      strong: (intensity) => `rgba(47, 158, 68, ${0.28 + intensity * 0.58})`,
       offset: -2.8,
-      width: (intensity) => 1 + intensity * 5.2,
+      width: (intensity) => 0.8 + intensity * 2.3,
     };
 
 const drawTrailSegment = (segment, points) =>
