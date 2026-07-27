@@ -370,6 +370,12 @@ h2 {
   padding: 16px;
 }
 
+.inspector {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+}
+
 .button-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -997,6 +1003,10 @@ footer span {
 
   .control-rail {
     grid-template-columns: 1fr;
+  }
+
+  .inspector {
+    position: static;
   }
 
   .transport,
