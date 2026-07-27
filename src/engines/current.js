@@ -7,7 +7,7 @@ export const DEFAULTS = Object.freeze({
   stopExploreChance: 0.2,
   speed: 0.17,
   slowHalfLife: 3_600,
-  homeReinforcement: 0.25,
+  homeReinforcement: 0.15,
   fastHalfLife: 14.4,
   fastInfluence: 4.56,
   outboundPolarity: 0.78,
@@ -31,6 +31,7 @@ export const DEFAULTS = Object.freeze({
 
 const UINT32_RANGE = 4_294_967_296;
 const EPSILON = 1e-9;
+const EXPLORATION_HOME_FLOOR = 1e-6;
 const HOME_ATTENUATION = 2;
 const ANT_LAUNCH_INTERVAL = 1 / 60;
 
@@ -560,18 +561,18 @@ export const createSimulation = ({
   };
 };
 
-const decayField = (field, halfLife, dt) => {
+const decayField = (field, halfLife, dt, cutoff = 1e-6) => {
   const factor = Math.pow(0.5, dt / halfLife);
   return Object.fromEntries(
     Object.entries(field).map(([node, value]) => {
       const decayed = value * factor;
-      return [node, decayed < 1e-6 ? 0 : decayed];
+      return [node, decayed < cutoff ? 0 : decayed];
     }),
   );
 };
 
 export const decayPheromones = (pheromones, params, dt) => ({
-  slow: decayField(pheromones.slow, params.slowHalfLife, dt),
+  slow: decayField(pheromones.slow, params.slowHalfLife, dt, 0),
   slowEdges: decayField(pheromones.slowEdges ?? {}, params.slowHalfLife, dt),
   fast: decayField(pheromones.fast, params.fastHalfLife, dt),
   fastEdges: decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
@@ -593,15 +594,21 @@ const normalizeChoices = (choices) => {
   }));
 };
 
-const relativeGradient = (field, node, neighbor) => {
-  const here = field[node] ?? 0;
-  const there = field[neighbor] ?? 0;
-  return (there - here) / Math.max(EPSILON, here + there);
+const fieldLevel = (field, node, floor = 0) => {
+  const level = field[node] ?? 0;
+  return level < floor ? 0 : level;
+};
+
+const relativeGradient = (field, node, neighbor, floor = 0) => {
+  const here = fieldLevel(field, node, floor);
+  const there = fieldLevel(field, neighbor, floor);
+  const total = here + there;
+  return total > 0 ? (there - here) / total : 0;
 };
 
 const signalMarked = (signal, node, neighbor) =>
   signal.edgeMask === undefined ||
-  (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > EPSILON;
+  (signal.edgeMask[edgeKey(node, neighbor)] ?? 0) > 0;
 
 const signalValue = (signal, node, neighbor) =>
   signalMarked(signal, node, neighbor)
@@ -650,14 +657,12 @@ const signalProbabilities = (
     influence > EPSILON || Math.abs(polarity) > EPSILON
   );
   const signaled = neighbors.filter((neighbor) =>
-    active.some((signal) => signalValue(signal, node, neighbor) > EPSILON)
+    active.some((signal) => signalValue(signal, node, neighbor) > 0)
   );
   if (signaled.length === 0) return [];
   return normalizeChoices(
     neighbors.map((neighbor) => {
-      const marked = active.some((signal) =>
-        signalValue(signal, node, neighbor) > EPSILON
-      );
+      const marked = active.some((signal) => signalValue(signal, node, neighbor) > 0);
       const visibility = Math.pow(
         1 / edgeLength(neighbor),
         params.distanceInfluence,
@@ -717,7 +722,12 @@ export const choiceProbabilities = (
       node: neighbor,
       weight: Math.exp(
         params.exploreSignalBias *
-          relativeGradient(pheromones.slow, node, neighbor),
+          relativeGradient(
+            pheromones.slow,
+            node,
+            neighbor,
+            EXPLORATION_HOME_FLOOR,
+          ),
       ) * (neighbor === discouragedNode ? params.reversePenalty : 1) *
         (
           hasUncharted && coverageAt(neighbor) > EPSILON
@@ -804,12 +814,13 @@ const foodwardProbabilities = (ant, graph, pheromones, params) =>
   );
 
 const hasExplorationProgress = (ant, graph, pheromones) => {
-  const here = pheromones.slow[ant.node] ?? 0;
+  const readable = (node) => fieldLevel(pheromones.slow, node, EXPLORATION_HOME_FLOOR);
+  const here = readable(ant.node);
   return graph.adjacency[ant.node].some((neighbor) =>
     neighbor !== ant.previous &&
     (
       isUnwalked(pheromones, ant.node, neighbor) ||
-      (pheromones.slow[neighbor] ?? 0) < here - EPSILON
+      readable(neighbor) < here - EPSILON
     )
   );
 };
@@ -818,7 +829,7 @@ const escapeProbabilities = (ant, graph, pheromones, params) => {
   const neighbors = graph.adjacency[ant.node];
   const here = pheromones.slow[ant.node] ?? 0;
   const homeward = neighbors.filter((neighbor) =>
-    (pheromones.slow[neighbor] ?? 0) > here + EPSILON
+    (pheromones.slow[neighbor] ?? 0) > here
   );
   const options = homeward.length > 0
     ? homeward
@@ -826,10 +837,14 @@ const escapeProbabilities = (ant, graph, pheromones, params) => {
     ? [ant.previous]
     : neighbors;
   const edgeLength = edgeLengthFrom(graph, ant.node);
+  const homeScale = homeward.length === 0
+    ? 1
+    : Math.max(...homeward.map((neighbor) => pheromones.slow[neighbor] ?? 0));
   return normalizeChoices(
     options.map((neighbor) => ({
       node: neighbor,
-      weight: Math.max(EPSILON, pheromones.slow[neighbor] ?? 0) *
+      weight:
+        (homeward.length === 0 ? 1 : (pheromones.slow[neighbor] ?? 0) / homeScale) *
         Math.pow(1 / edgeLength(neighbor), params.distanceInfluence),
     })),
   );
@@ -863,10 +878,10 @@ export const homewardProbabilities = (
 ) => {
   const here = pheromones.slow[node] ?? 0;
   const hasHomeward = neighbors.some((neighbor) =>
-    (pheromones.slow[neighbor] ?? 0) > here + EPSILON
+    (pheromones.slow[neighbor] ?? 0) > here
   );
   const progressBias = (neighbor) =>
-    hasHomeward && (pheromones.slow[neighbor] ?? 0) <= here + EPSILON
+    hasHomeward && (pheromones.slow[neighbor] ?? 0) <= here
       ? 1 - params.homewardPreference
       : 1;
   return signalProbabilities(
@@ -1115,7 +1130,7 @@ const arrive = (ant, graph, pheromones, params) => {
     : params.fastDeposit;
   const homeward = returning &&
     (pheromones.slow[ant.edge.to] ?? 0) >
-      (pheromones.slow[ant.edge.from] ?? 0) + EPSILON;
+      (pheromones.slow[ant.edge.from] ?? 0);
   const fastDeposits = homeward || foundFood
     ? [
       {

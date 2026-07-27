@@ -519,6 +519,51 @@ The playground exposes the rate directly. Saved algorithms and share URLs that p
 the lever migrate to `100%`, preserving their previous one-pass behavior; explicit
 values remain unchanged.
 
+### Long-distance dynamic range
+
+Incremental reinforcement exposed an absolute-threshold bug. A fresh `k`-edge trail is
+roughly proportional to `reinforcement^k`; on a long route its valid home potential can
+therefore be far below `1e-9`. The engine previously:
+
+- rounded persistent node levels below `1e-6` to zero during decay;
+- treated slopes smaller than an absolute `1e-9` as flat; and
+- hid rendered levels whose linear intensity was below `0.008`.
+
+Those cutoffs erased a valid relative gradient. Carriers then had no signaled homeward
+choice and stopped depositing food pheromone on the remote portion of their route.
+
+Persistent node levels now keep every positive finite value. Homeward slope is evaluated
+as `(there - here) / (there + here)`, with zero reserved for an unknown endpoint, and
+homeward ordering uses strict scalar comparison. Escape choices normalize incident home
+levels before weighting, so their probabilities do not depend on the field's absolute
+scale. Scouts retain a `1e-6` local sensory floor: beyond it they explore randomly
+rather than treating an imperceptible slope as endless outward progress. Food pheromone
+and binary edge coverage retain their cleanup cutoff.
+
+Rendering is intentionally separate from navigation: persistent levels use a logarithmic
+display transform, while food concentration retains the linear transform. Thus a weak
+distant home gradient remains visible without inflating its stored value or giving an
+ant any nonlocal information.
+
+Removing the cutoff changed the reinforcement model, so the old `25%` default was
+re-screened rather than retained by assumption. `15%` was promoted as the robust
+candidate:
+
+| Reinforcement | Screen | Validation | Confirmation | Boundary stress |
+| ------------: | -----: | ---------: | -----------: | --------------: |
+|           10% |  81.47 |      68.22 |        66.95 |           52.36 |
+|           15% |  78.50 |      73.46 |        71.98 |           59.18 |
+|           20% |  80.97 |      73.76 |        72.91 |           27.94 |
+|           25% |  81.58 |      66.46 |        72.38 |           30.86 |
+
+The `20%` and `25%` boundary runs each missed relocation on one of four maps. The `15%`
+candidate had perfect pickup, delivery, relocation-delivery, homing, stranded, and
+validity rates on screening, validation, confirmation, and boundary stress. Against the
+previous deployed `25%` cutoff model, it improved validation (`73.21 → 73.46`),
+confirmation (`68.77 → 71.98`), and boundary stress (`58.80 → 59.18`). A six-map browser
+cadence check scored `75.02`; the faster `50%` alternative remains available as the
+**Rapid home mapping** preset.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:

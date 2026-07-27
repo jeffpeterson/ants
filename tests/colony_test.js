@@ -227,6 +227,82 @@ Deno.test("home reinforcement accumulates below its local gradient cap", () => {
   assert(next > 0 && next < levels.at(-1));
 });
 
+Deno.test("a distant positive home gradient survives and remains navigable", () => {
+  const levels = Array.from({ length: 24 }).reduce(
+    (values) => [...values, reinforceHome(0, values.at(-1), 0.1, 0.25)],
+    [1],
+  );
+  const slow = {
+    ...Object.fromEntries(levels.map((level, node) => [node, level])),
+    25: 0,
+  };
+  const decayed = decayPheromones(
+    {
+      slow,
+      slowEdges: {},
+      fast: Object.fromEntries(Object.keys(slow).map((node) => [node, 0])),
+      fastEdges: {},
+    },
+    parameters({ slowHalfLife: 3_600, fastHalfLife: 14.4 }),
+    0.25,
+  );
+  const distant = decayed.slow[24];
+  const choices = homewardProbabilities(
+    24,
+    [23, 25],
+    decayed,
+    parameters({
+      homewardPreference: 1,
+      returnSlowInfluence: 3.09,
+      returnSlowPolarity: 4,
+      reversePenalty: 1,
+    }),
+  );
+
+  assert(distant > 0 && distant < 1e-9);
+  assertEquals(choices.map(({ node, probability }) => [node, probability]), [
+    [23, 1],
+    [25, 0],
+  ]);
+});
+
+Deno.test("a distant carrier identifies its tiny homeward signal", () => {
+  const initial = testSimulation({
+    seed: 71,
+    params: { antCount: 8, speed: 0.65 },
+  });
+  const node = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    !initial.graph.foods.includes(id) &&
+    !initial.graph.adjacency[id].includes(initial.graph.hill)
+  )?.id;
+  assert(node !== undefined);
+  const homeward = initial.graph.adjacency[node][0];
+  assert(homeward !== undefined);
+  const slow = {
+    ...initial.pheromones.slow,
+    [node]: 1e-20,
+    [homeward]: 2e-20,
+  };
+  const ant = {
+    ...initial.ants[0],
+    launchDelay: 0,
+    node,
+    mode: "return",
+    previous: null,
+    searchState: { kind: "follow" },
+    foodDeposit: initial.params.fastDeposit,
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    pheromones: { ...initial.pheromones, slow },
+    ants: [ant],
+  }, 0.001);
+
+  assertEquals(stepped.ants[0].edge.to, homeward);
+  assertEquals(stepped.ants[0].edge.returnTrail, "signal");
+});
+
 Deno.test("swarming makes a once-crossed bridge locally attractive", () => {
   const rate = 0.25;
   const reinforce = (level) => reinforceHome(level, 0.6, 0.1, rate);
@@ -296,12 +372,11 @@ Deno.test("every persistent mark retains a higher home-potential neighbor", () =
   for (let step = 0; step < 240; step += 1) {
     state = stepSimulation(state, 0.25);
     state.graph.nodes
-      .filter(({ id }) => id !== state.graph.hill && state.pheromones.slow[id] > 1e-8)
+      .filter(({ id }) => id !== state.graph.hill && state.pheromones.slow[id] > 0)
       .forEach(({ id }) =>
         assert(
           state.graph.adjacency[id].some((neighbor) =>
-            state.pheromones.slow[neighbor] >
-              state.pheromones.slow[id] + 1e-12
+            state.pheromones.slow[neighbor] > state.pheromones.slow[id]
           ),
           `Node ${id} became a persistent local maximum at step ${step}`,
         )
@@ -970,7 +1045,7 @@ Deno.test("food signal is deposited only after pickup", () => {
 });
 
 Deno.test("carriers deposit food signal only while making homeward progress", () => {
-  const crossing = (destinationLevel) => {
+  const crossing = (destinationLevel, sourceLevel = 0.4) => {
     const initial = testSimulation({
       seed: 37,
       params: { antCount: 8, speed: 0.65 },
@@ -983,7 +1058,7 @@ Deno.test("carriers deposit food signal only while making homeward progress", ()
     const dt = Math.min(0.1, edge.length / (initial.params.speed * 2));
     const slow = {
       ...initial.pheromones.slow,
-      [edge.a]: 0.4,
+      [edge.a]: sourceLevel,
       [edge.b]: destinationLevel,
     };
     const ant = {
@@ -1022,6 +1097,9 @@ Deno.test("carriers deposit food signal only while making homeward progress", ()
       .map(([key]) => key),
     [edge.id],
   );
+
+  const { state: distantHomeward } = crossing(8e-20, 4e-20);
+  assert(Object.values(distantHomeward.pheromones.fast).some((value) => value > 0));
 });
 
 Deno.test("food pickup reverses the incoming edge before local homing", () => {

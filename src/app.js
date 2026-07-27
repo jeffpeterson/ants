@@ -41,7 +41,12 @@ import {
   shortRevision,
   switchSimulationEngine,
 } from "./playground.js";
-import { antViewFor, metricsViewFor, trailSegments } from "./presentation.js";
+import {
+  antViewFor,
+  metricsViewFor,
+  trailSegments,
+  trailStrength,
+} from "./presentation.js";
 
 const byId = (id) => document.getElementById(id);
 const FOOD_COLOR = "#96b83f";
@@ -464,8 +469,6 @@ const line = (ctx, from, to) => {
   ctx.stroke();
 };
 
-const strength = (value) => 1 - Math.exp(-value * 0.42);
-
 const drawBaseEdges = (simulation, points) => {
   context.save();
   context.strokeStyle = "#9ca6a3";
@@ -520,6 +523,7 @@ const drawPheromoneEdge = (
     color,
     faint,
     strong,
+    strength,
     offset,
     width,
     dashed = false,
@@ -543,27 +547,35 @@ const drawPheromoneEdge = (
   }
   line(context, start, end);
   context.restore();
-  if (Math.abs(toLevel - fromLevel) > 1e-6) {
+  const totalLevel = fromLevel + toLevel;
+  if (
+    totalLevel > 0 &&
+    Math.abs(toLevel - fromLevel) / totalLevel > 1e-6
+  ) {
     drawArrow(weaker, stronger, intensity, color);
   }
 };
 
-const trailStyle = (channel) =>
-  channel === "slow"
-    ? {
-      color: "#c58b2a",
-      faint: "rgba(197, 139, 42, 0.06)",
-      strong: (intensity) => `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
-      offset: 2.8,
-      width: (intensity) => 0.5 + intensity * 2.6,
-    }
-    : {
-      color: FOOD_COLOR,
-      faint: "rgba(150, 184, 63, 0.06)",
-      strong: (intensity) => `rgba(150, 184, 63, ${0.28 + intensity * 0.58})`,
-      offset: -2.8,
-      width: (intensity) => 0.5 + intensity * 2.6,
-    };
+const trailStyle = (channel) => ({
+  strength: (value) => trailStrength(channel, value),
+  ...(
+    channel === "slow"
+      ? {
+        color: "#c58b2a",
+        faint: "rgba(197, 139, 42, 0.06)",
+        strong: (intensity) => `rgba(197, 139, 42, ${0.28 + intensity * 0.58})`,
+        offset: 2.8,
+        width: (intensity) => 0.5 + intensity * 2.6,
+      }
+      : {
+        color: FOOD_COLOR,
+        faint: "rgba(150, 184, 63, 0.06)",
+        strong: (intensity) => `rgba(150, 184, 63, ${0.28 + intensity * 0.58})`,
+        offset: -2.8,
+        width: (intensity) => 0.5 + intensity * 2.6,
+      }
+  ),
+});
 
 const drawTrailSegment = (segment, points) =>
   drawPheromoneEdge(

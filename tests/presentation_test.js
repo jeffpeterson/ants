@@ -5,6 +5,7 @@ import {
   antViewFor,
   metricsViewFor,
   trailSegments,
+  trailStrength,
   trailViewFor,
 } from "../src/presentation.js";
 
@@ -26,6 +27,12 @@ const map = {
 const emptyNodes = (graph) => Object.fromEntries(graph.nodes.map(({ id }) => [id, 0]));
 
 const emptyEdges = (graph) => Object.fromEntries(graph.edges.map(({ id }) => [id, 0]));
+
+Deno.test("weak home trails stay visible on the logarithmic scale", () => {
+  assert(trailStrength("slow", 1e-30) > 0.008);
+  assert(trailStrength("fast", 1e-30) < 0.008);
+  assertEquals(trailStrength("slow", 0), 0);
+});
 
 Deno.test("current node and edge trail rendering retains scalar parity", () => {
   const initial = createPlaygroundSimulation({ map });

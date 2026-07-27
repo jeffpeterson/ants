@@ -49,7 +49,7 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
   const homeRate = (id) =>
     BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
       ?.params.homeReinforcement;
-  assertEquals(homeRate("balanced-node"), 0.25);
+  assertEquals(homeRate("balanced-node"), 0.15);
   assertEquals(homeRate("rapid-home"), 0.5);
   assertEquals(homeRate("adaptive-edge"), 1);
   assertEquals(homeRate("legacy"), 1);

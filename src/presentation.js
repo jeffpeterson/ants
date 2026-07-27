@@ -4,6 +4,13 @@ import { activeFoodsFor } from "./playground.js";
 const positive = (value) => Number.isFinite(value) && value > 0;
 const EMPTY_FIELD = Object.freeze({});
 
+export const trailStrength = (channel, value) => {
+  if (!positive(value)) return 0;
+  return channel === "slow"
+    ? 1 / (3 + 0.25 * Math.max(0, -Math.log(value)))
+    : 1 - Math.exp(-value * 0.42);
+};
+
 const currentTrailView = (simulation) => {
   const edgeFood = simulation.params.foodTrailModel === "edge";
   return {
