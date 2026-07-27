@@ -21,6 +21,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "returnFastPolarity",
   "returnSlowPolarity",
   "homewardPreference",
+  "homeReinforcement",
   "slowHalfLife",
   "fastHalfLife",
 ]);
@@ -58,6 +59,7 @@ const migrateParams = (engineId, params) =>
       ...(!Object.hasOwn(params, "newTrailSignalShare")
         ? { newTrailSignalShare: 0 }
         : {}),
+      ...(!Object.hasOwn(params, "homeReinforcement") ? { homeReinforcement: 1 } : {}),
     }
     : params;
 

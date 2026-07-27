@@ -7,6 +7,7 @@ export const DEFAULTS = Object.freeze({
   stopExploreChance: 0.2,
   speed: 0.17,
   slowHalfLife: 3_600,
+  homeReinforcement: 0.25,
   fastHalfLife: 14.4,
   fastInfluence: 4.56,
   outboundPolarity: 0.78,
@@ -67,6 +68,11 @@ export const sanitizeParams = (values = {}) => ({
     5,
     86_400,
     finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife),
+  ),
+  homeReinforcement: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.homeReinforcement, values.homeReinforcement),
   ),
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
   exploreSignalBias: clamp(
@@ -764,6 +770,11 @@ const headingBiasFrom = (graph, node, previous, influence) => {
 export const attenuateHome = (level, length) =>
   level * Math.exp(-HOME_ATTENUATION * length);
 
+export const reinforceHome = (level, source, length, rate) => {
+  const cap = attenuateHome(source, length);
+  return level + clamp(0, 1, rate) * Math.max(0, cap - level);
+};
+
 const movementEdge = (ant, graph, to, extra = {}) => {
   const length = graph.edgeById[edgeKey(ant.node, to)].length;
   return {
@@ -1083,7 +1094,12 @@ const arrive = (ant, graph, pheromones, params) => {
       {
         channel: "slow",
         target: ant.edge.to,
-        amount: attenuateHome(source, ant.edge.length),
+        amount: reinforceHome(
+          pheromones.slow[ant.edge.to] ?? 0,
+          source,
+          ant.edge.length,
+          params.homeReinforcement,
+        ),
         combine: "max",
       },
     ]

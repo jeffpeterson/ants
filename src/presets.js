@@ -49,6 +49,14 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
     },
   ),
   builtIn(
+    "rapid-home",
+    "Rapid home mapping",
+    "Fills half of each safe home-field gap per traversal for stronger homing on boundary-scale maps.",
+    {
+      homeReinforcement: 0.5,
+    },
+  ),
+  builtIn(
     "adaptive-edge",
     "Adaptive edge trails",
     "More efficient and adaptive on many dense maps, but less reliable on sparse maps.",
@@ -68,6 +76,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
       returnSlowInfluence: 9.48,
       returnFastPolarity: 0,
       returnSlowPolarity: 4,
+      homeReinforcement: 1,
       slowHalfLife: 28.3,
       fastHalfLife: 12.6,
       foodTrailModel: "edge",
@@ -94,6 +103,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
       returnSlowInfluence: 8,
       returnFastPolarity: 0,
       returnSlowPolarity: 4,
+      homeReinforcement: 1,
       slowHalfLife: 42,
       fastHalfLife: 9,
       foodTrailModel: "node",

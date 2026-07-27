@@ -10,7 +10,7 @@ import {
 } from "./colony.js";
 import { ALGORITHM_KEYS } from "./config.js";
 
-export const EVALUATION_VERSION = 4;
+export const EVALUATION_VERSION = 5;
 
 export const OPTIMIZED_KEYS = Object.freeze([
   "exploreRate",
@@ -29,6 +29,7 @@ export const OPTIMIZED_KEYS = Object.freeze([
   "returnSlowInfluence",
   "returnFastPolarity",
   "returnSlowPolarity",
+  "homeReinforcement",
   "slowHalfLife",
   "fastHalfLife",
 ]);
@@ -56,6 +57,7 @@ export const PARAMETER_SPECS = Object.freeze([
   { key: "returnSlowInfluence", min: 0, max: 10, scale: "power", power: 2 },
   { key: "returnFastPolarity", min: -4, max: 4, scale: "linear" },
   { key: "returnSlowPolarity", min: -4, max: 4, scale: "linear" },
+  { key: "homeReinforcement", min: 0.05, max: 1, scale: "linear" },
   { key: "slowHalfLife", min: 5, max: 86_400, scale: "log" },
   { key: "fastHalfLife", min: 2, max: 40, scale: "log" },
 ].map(Object.freeze));
@@ -78,6 +80,7 @@ export const HYPOTHESIS_PARAMS = Object.freeze({
   returnSlowInfluence: 8,
   returnFastPolarity: 0,
   returnSlowPolarity: 4,
+  homeReinforcement: 0.25,
   slowHalfLife: 3_600,
   fastHalfLife: 8,
 });

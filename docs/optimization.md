@@ -124,6 +124,22 @@ selecting slider values:
 5. **Trip-quality reinforcement is also excluded.** Scaling deposits by a completed
    route's length would give strong artificial-ACO feedback, but requires personal
    odometry or route memory beyond the local pheromone-only decision model.
+6. **Bounded incremental home reinforcement should turn local swarming into useful
+   coverage pressure without adding a field.** The current `max` update fills the
+   distance-attenuated value on the first traversal, so later ants cannot reinforce the
+   persistent home signal. For a search traversal `u → v`, the candidate rule is:
+
+   ```text
+   cap = H(u) × exp(-λd)
+   H'(v) = H(v) + r × max(0, cap - H(v))
+   ```
+
+   The cap remains strictly below the source, preserving the peak-free home gradient.
+   Repeated traffic raises a branch toward that cap; therefore explorers descending the
+   field should increasingly avoid already-swarmed branches, while carriers can climb
+   the same field. The predicted best rate is `r = 0.25`: enough signal for a returning
+   discoverer, but enough headroom for later ants to add information. Rates `0.05`,
+   `0.1`, `0.25`, `0.5`, and the existing one-pass behavior `1` will be screened.
 
 ## Search protocol
 
@@ -460,6 +476,48 @@ control maps exhibiting starvation, its immediate share changed from `0.52%` to 
 and from `0.68%` to `10.54%`. After 30 seconds those shares were `11.29%` and `33.93%`,
 versus `0.39%` and `2.82%` in the control. Old saved algorithms migrate this lever to
 zero so their behavior remains reproducible.
+
+## Bounded home-field reinforcement
+
+The preregistered structural hypothesis identified a semantic bug in the old update:
+`max(current, cap)` filled the locally safe home potential on the first traversal, so a
+swarm could not reinforce it further. The promoted rule instead fills a fraction of the
+remaining gap:
+
+```text
+cap = H(source) × exp(-λ × edgeLength)
+H'(destination) =
+  H(destination) + reinforcement × max(0, cap - H(destination))
+```
+
+This is a convex step toward a value strictly below its source. It therefore retains a
+higher local witness for every mark, cannot create a new peak, and cannot amplify a
+loop. Repeated ants progressively raise a branch toward the same distance-derived cap.
+At a covered gateway, a heavily swarmed internal branch consequently has more home
+signal than a once-crossed bridge; an outward-biased scout locally favors the bridge
+without a traffic field, route memory, or knowledge of the graph beyond that junction.
+
+The preregistered screen compared rates `5%`, `10%`, `25%`, `50%`, and the old one-pass
+rate `100%`. The `25%` prediction won and was promoted:
+
+| Suite                    | Maps |   10% |   25% |   50% | 100% control |
+| ------------------------ | ---: | ----: | ----: | ----: | -----------: |
+| Screening                |    6 | 68.93 | 80.50 | 78.60 |        73.16 |
+| Validation               |   24 | 51.79 | 73.21 | 66.08 |        55.25 |
+| Fresh confirmation       |   24 |     — | 68.77 | 66.17 |        53.39 |
+| Boundary stress          |    4 | 15.67 | 58.80 | 60.69 |        60.70 |
+| Browser-cadence confirm. |    6 |     — | 78.27 |     — |        33.37 |
+
+The `25%` candidate had no pickup, initial-delivery, relocated-delivery, stranded, or
+invalid-run failures on screening, validation, and fresh confirmation. On boundary
+stress it traded some homing reliability (`0.904` versus `1.0`) for better throughput
+and efficiency, finishing about 3% below the old aggregate. The `50%` candidate matched
+the old boundary score while remaining substantially better on the larger held-out
+suites, so it is retained as the **Rapid home mapping** preset.
+
+The playground exposes the rate directly. Saved algorithms and share URLs that predate
+the lever migrate to `100%`, preserving their previous one-pass behavior; explicit
+values remain unchanged.
 
 ## Run the evaluator
 

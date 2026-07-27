@@ -42,6 +42,7 @@ Deno.test("v1 share URLs migrate to the scalar-field v2 shape", () => {
         ...legacy.algorithm,
         trailJoinChance: 0,
         newTrailSignalShare: 0,
+        homeReinforcement: 1,
       },
     },
     map,
@@ -66,7 +67,7 @@ Deno.test("v2 share URLs retain their engine-aware algorithm data", () => {
   );
 });
 
-Deno.test("recruitment migration preserves explicit values and old behavior", () => {
+Deno.test("new lever migration preserves explicit values and old behavior", () => {
   const explicit = {
     version: 2,
     algorithm: {
@@ -75,6 +76,7 @@ Deno.test("recruitment migration preserves explicit values and old behavior", ()
         speed: 0.12,
         trailJoinChance: 0.06,
         newTrailSignalShare: 0.2,
+        homeReinforcement: 0.25,
       },
     },
     map,
@@ -90,7 +92,12 @@ Deno.test("recruitment migration preserves explicit values and old behavior", ()
   assertEquals(decodeConfiguration(encodeConfiguration(explicit)), explicit);
   assertEquals(
     decodeConfiguration(encodeConfiguration(old)).algorithm.params,
-    { speed: 0.12, trailJoinChance: 0, newTrailSignalShare: 0 },
+    {
+      speed: 0.12,
+      trailJoinChance: 0,
+      newTrailSignalShare: 0,
+      homeReinforcement: 1,
+    },
   );
 });
 
@@ -125,7 +132,12 @@ Deno.test("user algorithm preset migration accepts legacy and tagged values", ()
 
   assertEquals(migrateAlgorithmPreset(legacy), {
     engineId: CURRENT_ENGINE_ID,
-    params: { ...legacy, trailJoinChance: 0, newTrailSignalShare: 0 },
+    params: {
+      ...legacy,
+      trailJoinChance: 0,
+      newTrailSignalShare: 0,
+      homeReinforcement: 1,
+    },
   });
   assertEquals(migrateAlgorithmPreset(tagged), {
     engineId: "another-engine",
@@ -153,6 +165,7 @@ Deno.test("legacy localStorage libraries migrate entry by entry", () => {
         ...stored.legacy,
         trailJoinChance: 0,
         newTrailSignalShare: 0,
+        homeReinforcement: 1,
       },
     },
     tagged: stored.tagged,

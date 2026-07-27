@@ -354,6 +354,11 @@
                 <option value="edge">Undirected edges</option>
               </select>
             </label>
+            <label class="slider-row signal-persistent" for="homeReinforcement">
+              <span><span><strong class="persistent-name">Persistent</strong> reinforcement</span> <output id="homeReinforcement-value">25%</output></span>
+              <input id="homeReinforcement" type="range" min="0" max="100"
+                step="1" value="25">
+            </label>
             <label class="slider-row signal-persistent" for="slowHalfLife">
               <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">1 h</output></span>
               <input id="slowHalfLife" type="range" min="5" max="86400" step="5"

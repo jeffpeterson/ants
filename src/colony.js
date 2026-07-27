@@ -17,6 +17,7 @@ export {
   homewardProbabilities,
   isConnected,
   nextRandom,
+  reinforceHome,
   sanitizeParams,
   shortestRoute,
   shortestRouteToFood,

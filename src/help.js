@@ -47,6 +47,8 @@ export const CONTROL_HELP = Object.freeze({
     "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
   newTrailSignalShare:
     "At pickup, a weak food node makes the ant carry enough pheromone to target this fraction of the signal at the endpoint it arrived from. Zero always uses the normal deposit.",
+  homeReinforcement:
+    "Fraction of the locally safe persistent home-field gap filled by each searching ant traversal. Lower values let repeated traffic strengthen the field gradually; 100% fills it in one pass.",
   foodTrailModel:
     "Use scalar node levels for derived slopes along carrier-traversed edges, or use undirected edge strength with no slope. Neither mode marks adjacent untraversed branches.",
   fastInfluence:

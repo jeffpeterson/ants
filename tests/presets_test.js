@@ -46,6 +46,13 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
   assertEquals(joinChance("steady-food"), 0.06);
   assertEquals(joinChance("adaptive-edge"), 0);
   assertEquals(joinChance("legacy"), 0);
+  const homeRate = (id) =>
+    BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
+      ?.params.homeReinforcement;
+  assertEquals(homeRate("balanced-node"), 0.25);
+  assertEquals(homeRate("rapid-home"), 0.5);
+  assertEquals(homeRate("adaptive-edge"), 1);
+  assertEquals(homeRate("legacy"), 1);
 });
 
 Deno.test("preset references preserve provenance and names containing colons", () => {
@@ -140,6 +147,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     returnSlowInfluence: 10,
     returnFastPolarity: 10,
     returnSlowPolarity: 10,
+    homeReinforcement: 100,
     slowHalfLife: 1,
     fastHalfLife: 1,
   };

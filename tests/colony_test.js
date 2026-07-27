@@ -13,6 +13,7 @@ import {
   isConnected,
   moveFood,
   nextRandom,
+  reinforceHome,
   removeFood,
   stepSimulation,
   trailGradient,
@@ -209,6 +210,50 @@ Deno.test("the first outbound trail already increases toward home", () => {
       `Node ${id} lacks a higher home-potential neighbor`,
     )
   );
+});
+
+Deno.test("home reinforcement accumulates below its local gradient cap", () => {
+  const cap = reinforceHome(0, 1, 0.2, 1);
+  const levels = Array.from({ length: 4 }).reduce(
+    (values) => [...values, reinforceHome(values.at(-1), 1, 0.2, 0.25)],
+    [0],
+  );
+
+  assert(levels.every((level, index) => index === 0 || level > levels[index - 1]));
+  assert(levels.every((level) => level < cap));
+  assertEquals(reinforceHome(cap, 1, 0.2, 0.25), cap);
+  assertEquals(reinforceHome(0.9, 0.5, 0.2, 0.25), 0.9);
+  const next = reinforceHome(0, levels.at(-1), 0.2, 0.25);
+  assert(next > 0 && next < levels.at(-1));
+});
+
+Deno.test("swarming makes a once-crossed bridge locally attractive", () => {
+  const rate = 0.25;
+  const reinforce = (level) => reinforceHome(level, 0.6, 0.1, rate);
+  const bridge = reinforce(0);
+  const swarmed = Array.from({ length: 8 }).reduce(reinforce, 0);
+  const cap = reinforceHome(0, 0.6, 0.1, 1);
+  const probabilities = (first, second) =>
+    choiceProbabilities(
+      0,
+      [1, 2],
+      {
+        slow: { 0: 0.6, 1: first, 2: second },
+        slowEdges: {
+          [edgeKey(0, 1)]: 1,
+          [edgeKey(0, 2)]: 1,
+        },
+        fast: { 0: 0, 1: 0, 2: 0 },
+      },
+      parameters({
+        exploreSignalBias: -2,
+        unchartedPreference: 0.75,
+      }),
+      true,
+    ).find(({ node }) => node === 2).probability;
+
+  assert(probabilities(swarmed, bridge) > 0.7);
+  assertEquals(probabilities(cap, cap), 0.5);
 });
 
 Deno.test("stale carried values cannot inject persistent signal", () => {
@@ -1171,6 +1216,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "choiceFloor",
     "foodTrailModel",
     "newTrailSignalShare",
+    "homeReinforcement",
     "fastInfluence",
     "outboundPolarity",
     "homewardPreference",
