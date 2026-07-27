@@ -3,7 +3,6 @@ import {
   clearPheromones,
   CURRENT_ENGINE_ID,
   deriveMetrics,
-  dominantFoodRoute,
   ENGINES,
   foodProbabilitiesForNode,
   getEngine,
@@ -477,22 +476,6 @@ const drawBaseEdges = (simulation, points) => {
   context.restore();
 };
 
-const routePairs = (route) => route.slice(1).map((node, index) => [route[index], node]);
-
-const drawLeadingRoute = (simulation, points) => {
-  const leading = dominantFoodRoute(simulation);
-  if (leading === null) return;
-  context.save();
-  context.strokeStyle = "#087f8c";
-  context.globalAlpha = 0.09;
-  context.lineWidth = 12;
-  context.lineCap = "round";
-  routePairs(leading.route).forEach(([from, to]) =>
-    line(context, points[from], points[to])
-  );
-  context.restore();
-};
-
 const offsetArc = (from, to, amount = 3.2) => {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -574,12 +557,11 @@ const trailStyle = (channel) =>
       width: (intensity) => 1 + intensity * 5.2,
     }
     : {
-      color: "#087f8c",
-      faint: "rgba(8, 127, 140, 0.08)",
-      strong: (intensity) => `rgba(8, 127, 140, ${0.35 + intensity * 0.6})`,
-      offset: -3.2,
-      width: (intensity) => 1.2 + intensity * 4.6,
-      dashed: true,
+      color: "#315cf5",
+      faint: "rgba(49, 92, 245, 0.06)",
+      strong: (intensity) => `rgba(49, 92, 245, ${0.28 + intensity * 0.58})`,
+      offset: -2.8,
+      width: (intensity) => 1 + intensity * 5.2,
     };
 
 const drawTrailSegment = (segment, points) =>
@@ -760,7 +742,6 @@ const drawCanvas = (current) => {
     current.simulation.graph.nodes.map((node) => [node.id, project(node, size)]),
   );
   const activeFoods = activeFoodsFor(current.simulation);
-  drawLeadingRoute(current.simulation, points);
   drawBaseEdges(current.simulation, points);
   if (current.view.trails) {
     trailSegments(current.simulation).forEach((segment) =>

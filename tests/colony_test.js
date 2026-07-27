@@ -1142,6 +1142,15 @@ Deno.test("a selected node keeps its inspector above the long control stack", as
   assert(!/\.inspector\s*\{\s*position:\s*sticky;/u.test(css));
 });
 
+Deno.test("food signal renders as one solid blue line", async () => {
+  const app = await Deno.readTextFile(new URL("../src/app.js", import.meta.url));
+
+  assert(app.includes('color: "#315cf5"'));
+  assert(!app.includes("const drawLeadingRoute"));
+  assert(!app.includes("drawLeadingRoute(current.simulation"));
+  assert(!/color:\s*"#315cf5"[\s\S]*?dashed:\s*true/u.test(app));
+});
+
 Deno.test("every interactive control has help text", async () => {
   const html = await Deno.readTextFile(new URL("../index.html", import.meta.url));
   const controlIds = [...html.matchAll(
