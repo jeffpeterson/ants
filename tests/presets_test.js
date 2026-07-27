@@ -46,6 +46,11 @@ Deno.test("built-in algorithms are complete, immutable, and uniquely named", () 
   assertEquals(joinChance("steady-food"), 0.06);
   assertEquals(joinChance("adaptive-edge"), 0);
   assertEquals(joinChance("legacy"), 0);
+  const lifecycle = (id) =>
+    BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
+      ?.params.scoutLifecycle;
+  assertEquals(lifecycle("balanced-node"), "frontier");
+  assertEquals(lifecycle("completed-scouting"), "complete");
   const homeRate = (id) =>
     BUILT_IN_ALGORITHM_PRESETS.find((preset) => preset.id === id)
       ?.params.homeReinforcement;
@@ -90,6 +95,7 @@ Deno.test("built-ins and user presets resolve independently", () => {
   assertEquals(resolvedUser.name, builtIn.name);
   assertEquals(resolvedUser.engineId, CURRENT_ENGINE_ID);
   assertEquals(resolvedUser.params.exploreRate, 0.2);
+  assertEquals(resolvedUser.params.scoutLifecycle, DEFAULTS.scoutLifecycle);
   assertEquals(resolvedUser.params.foodTrailModel, DEFAULTS.foodTrailModel);
   assertEquals(resolvedTagged.engineId, "another-engine");
   assertEquals(resolvedTagged.params.exploreRate, 0.1);
@@ -170,5 +176,9 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
   assert(
     html.includes(`<option value="${DEFAULTS.foodTrailModel}" selected>`),
     "Food-trail selector differs from DEFAULTS",
+  );
+  assert(
+    html.includes(`<option value="${DEFAULTS.scoutLifecycle}" selected>`),
+    "Scout-lifecycle selector differs from DEFAULTS",
   );
 });

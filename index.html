@@ -240,6 +240,13 @@
               <input id="stopExploreChance" type="range" min="0" max="95" step="0.1"
                 value="20">
             </label>
+            <label class="slider-row" for="scoutLifecycle">
+              <span>Exhausted scout lifecycle</span>
+              <select id="scoutLifecycle">
+                <option value="frontier" selected>Frontier only</option>
+                <option value="complete">Complete locally exhausted scouts</option>
+              </select>
+            </label>
             <label class="slider-row signal-persistent" for="exploreSignalBias">
               <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="exploreSignalBias-value">2× away</output></span>
               <input id="exploreSignalBias" type="range" min="-40" max="40" step="0.1"

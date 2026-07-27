@@ -828,7 +828,7 @@ Deno.test("a scout treats its incoming edge as walked immediately", () => {
   assertEquals(choices.map(({ probability }) => probability), [0, 1]);
 });
 
-Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
+Deno.test("the complete lifecycle locally arms an exhausted scout", () => {
   const initial = testSimulation({
     seed: 29,
     params: {
@@ -855,8 +855,9 @@ Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
   const rngSeed = Array.from({ length: 100 }, (_, seed) => seed).find((seed) =>
     nextRandom(seed)[0] < chance
   );
-  const stateFor = (frontierArmed) => ({
+  const stateFor = (frontierArmed, scoutLifecycle = "frontier") => ({
     ...initial,
+    params: { ...initial.params, scoutLifecycle },
     rngSeed,
     pheromones: {
       ...initial.pheromones,
@@ -872,11 +873,17 @@ Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
     }],
   });
 
-  const unarmed = stepSimulation(stateFor(false), 0.25).ants[0];
-  assertEquals(unarmed.searchState, {
+  const frontier = stepSimulation(stateFor(false), 0.25);
+  assertEquals(frontier.ants[0].searchState, {
     kind: "explore",
     frontierArmed: false,
   });
+  const complete = stepSimulation(stateFor(false, "complete"), 0.25);
+  assertEquals(complete.ants[0].searchState, {
+    kind: "explore",
+    frontierArmed: true,
+  });
+  assertEquals(complete.rngSeed, frontier.rngSeed);
 
   const armed = stepSimulation(stateFor(true), 0.25).ants[0];
   assertEquals(armed.searchState.kind, "escape");
@@ -887,12 +894,13 @@ Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
   );
 });
 
-Deno.test("covered downhill travel never makes an armed scout retreat", () => {
+Deno.test("covered downhill travel never makes a scout retreat", () => {
   const initial = testSimulation({
     seed: 29,
     params: {
       antCount: 8,
       stopExploreChance: 0.95,
+      scoutLifecycle: "complete",
     },
   });
   const node = initial.graph.nodes.find(({ id }) =>
@@ -906,32 +914,33 @@ Deno.test("covered downhill travel never makes an armed scout retreat", () => {
       id === initial.graph.hill ? 1 : id === node ? 0.4 : 0.2,
     ]),
   );
-  const ant = {
-    ...initial.ants[0],
-    node,
-    previous: initial.graph.adjacency[node][0],
-    searchState: { kind: "explore", frontierArmed: true },
-  };
-  const stepped = stepSimulation({
-    ...initial,
-    pheromones: {
-      ...initial.pheromones,
-      slow,
-      slowEdges: Object.fromEntries(
-        initial.graph.edges.map(({ id }) => [id, 1]),
-      ),
-    },
-    ants: [ant],
-  }, 0.001).ants[0];
+  [false, true].forEach((frontierArmed) => {
+    const stepped = stepSimulation({
+      ...initial,
+      pheromones: {
+        ...initial.pheromones,
+        slow,
+        slowEdges: Object.fromEntries(
+          initial.graph.edges.map(({ id }) => [id, 1]),
+        ),
+      },
+      ants: [{
+        ...initial.ants[0],
+        node,
+        previous: initial.graph.adjacency[node][0],
+        searchState: { kind: "explore", frontierArmed },
+      }],
+    }, 0.001).ants[0];
 
-  assertEquals(stepped.searchState, {
-    kind: "explore",
-    frontierArmed: true,
+    assertEquals(stepped.searchState, {
+      kind: "explore",
+      frontierArmed,
+    });
+    assert(
+      slow[stepped.edge.to] <= slow[node],
+      "A covered outward branch must still count as exploration progress",
+    );
   });
-  assert(
-    slow[stepped.edge.to] <= slow[node],
-    "A covered outward branch must still count as exploration progress",
-  );
 });
 
 Deno.test("choosing an unwalked edge arms the scout frontier", () => {
@@ -1437,6 +1446,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   [
     "exploreRate",
     "stopExploreChance",
+    "scoutLifecycle",
     "exploreSignalBias",
     "unchartedPreference",
     "trailJoinChance",

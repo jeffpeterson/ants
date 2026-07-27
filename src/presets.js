@@ -41,6 +41,15 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
     },
   ),
   builtIn(
+    "completed-scouting",
+    "Complete scout lifecycle",
+    "Causal candidate: locally exhausted scouts become eligible to return even if another ant covered the frontier first.",
+    {
+      scoutLifecycle: "complete",
+      stopExploreChance: 0.01,
+    },
+  ),
+  builtIn(
     "steady-food",
     "Cautious recruitment",
     "Retains more active scouts for volatile food at the cost of stable-route traffic.",

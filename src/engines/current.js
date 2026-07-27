@@ -5,6 +5,7 @@ export const DEFAULTS = Object.freeze({
   antCount: 64,
   exploreRate: 0.007,
   stopExploreChance: 0.2,
+  scoutLifecycle: "frontier",
   speed: 0.17,
   slowHalfLife: 3_600,
   homeReinforcement: 0.15,
@@ -66,6 +67,7 @@ export const sanitizeParams = (values = {}) => ({
     0.95,
     finiteOr(DEFAULTS.stopExploreChance, values.stopExploreChance),
   ),
+  scoutLifecycle: values.scoutLifecycle === "complete" ? "complete" : "frontier",
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
   slowHalfLife: clamp(
     5,
@@ -1393,7 +1395,16 @@ const maybeStopExploring = (ant, graph, pheromones, params, seed, dt) => {
     return { ant, seed };
   }
   if (ant.searchState.frontierArmed !== true) {
-    return { ant, seed };
+    return params.scoutLifecycle === "complete" &&
+        !hasExplorationProgress(ant, graph, pheromones)
+      ? {
+        ant: {
+          ...ant,
+          searchState: { kind: "explore", frontierArmed: true },
+        },
+        seed,
+      }
+      : { ant, seed };
   }
   if (hasExplorationProgress(ant, graph, pheromones)) {
     return { ant, seed };

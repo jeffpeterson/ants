@@ -40,6 +40,7 @@ Deno.test("v1 share URLs migrate to the scalar-field v2 shape", () => {
       engineId: CURRENT_ENGINE_ID,
       params: {
         ...legacy.algorithm,
+        scoutLifecycle: "frontier",
         trailJoinChance: 0,
         newTrailSignalShare: 0,
         homeReinforcement: 1,
@@ -74,6 +75,7 @@ Deno.test("new lever migration preserves explicit values and old behavior", () =
       engineId: CURRENT_ENGINE_ID,
       params: {
         speed: 0.12,
+        scoutLifecycle: "complete",
         trailJoinChance: 0.06,
         newTrailSignalShare: 0.2,
         homeReinforcement: 0.25,
@@ -94,6 +96,7 @@ Deno.test("new lever migration preserves explicit values and old behavior", () =
     decodeConfiguration(encodeConfiguration(old)).algorithm.params,
     {
       speed: 0.12,
+      scoutLifecycle: "frontier",
       trailJoinChance: 0,
       newTrailSignalShare: 0,
       homeReinforcement: 1,
@@ -134,6 +137,7 @@ Deno.test("user algorithm preset migration accepts legacy and tagged values", ()
     engineId: CURRENT_ENGINE_ID,
     params: {
       ...legacy,
+      scoutLifecycle: "frontier",
       trailJoinChance: 0,
       newTrailSignalShare: 0,
       homeReinforcement: 1,
@@ -163,6 +167,7 @@ Deno.test("legacy localStorage libraries migrate entry by entry", () => {
       engineId: CURRENT_ENGINE_ID,
       params: {
         ...stored.legacy,
+        scoutLifecycle: "frontier",
         trailJoinChance: 0,
         newTrailSignalShare: 0,
         homeReinforcement: 1,

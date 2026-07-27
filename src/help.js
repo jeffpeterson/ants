@@ -31,6 +31,8 @@ export const CONTROL_HELP = Object.freeze({
     "Chance that a normal searching ant switches into random scouting at each junction.",
   stopExploreChance:
     "Per-second chance that a scout returns home after it has used an unwalked edge and can no longer find an unwalked or downhill non-U-turn branch.",
+  scoutLifecycle:
+    "Frontier-only returns only scouts that crossed an unwalked edge. Complete also makes any locally exhausted scout eligible, without returning it immediately.",
   exploreSignalBias:
     "Scout response to the persistent home-field slope: negative moves away from home, zero ignores the slope, and positive moves homeward.",
   unchartedPreference:

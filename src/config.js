@@ -4,6 +4,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "antCount",
   "exploreRate",
   "stopExploreChance",
+  "scoutLifecycle",
   "exploreSignalBias",
   "unchartedPreference",
   "trailJoinChance",
@@ -57,6 +58,9 @@ const migrateParams = (engineId, params) =>
   engineId === CURRENT_ENGINE_ID
     ? {
       ...params,
+      ...(!Object.hasOwn(params, "scoutLifecycle")
+        ? { scoutLifecycle: "frontier" }
+        : {}),
       ...(!Object.hasOwn(params, "trailJoinChance") ? { trailJoinChance: 0 } : {}),
       ...(!Object.hasOwn(params, "newTrailSignalShare")
         ? { newTrailSignalShare: 0 }

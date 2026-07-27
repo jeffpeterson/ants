@@ -971,6 +971,11 @@ const sliderConfigs = [
   ],
 ];
 
+const selectConfigs = [
+  "scoutLifecycle",
+  "foodTrailModel",
+];
+
 const setControlSupport = (input, name, supported, engine) => {
   input.disabled = !supported;
   input.closest(".slider-row").dataset.supported = String(supported);
@@ -999,17 +1004,12 @@ const syncControls = (current) => {
       byId(`${name}-value`).textContent = "not available";
     }
   });
-  const foodTrailModel = byId("foodTrailModel");
-  const supportsFoodTrail = supportsEngineParameter(engine, "foodTrailModel");
-  setControlSupport(
-    foodTrailModel,
-    "foodTrailModel",
-    supportsFoodTrail,
-    engine,
-  );
-  if (supportsFoodTrail) {
-    foodTrailModel.value = simulation.params.foodTrailModel;
-  }
+  selectConfigs.forEach((name) => {
+    const input = byId(name);
+    const supported = supportsEngineParameter(engine, name);
+    setControlSupport(input, name, supported, engine);
+    if (supported) input.value = simulation.params[name];
+  });
   byId("engineId").value = simulation.engineId;
   setText("engine-revision", shortRevision(engine));
   setText("engine-note", engineNote(engine));
@@ -1048,12 +1048,14 @@ sliderConfigs.forEach(([name, parse, format]) => {
   output.textContent = format(input.value);
 });
 
-byId("foodTrailModel").addEventListener("change", (event) =>
-  dispatch({
-    type: "parameter",
-    name: "foodTrailModel",
-    value: event.currentTarget.value,
-  }));
+selectConfigs.forEach((name) =>
+  byId(name).addEventListener("change", (event) =>
+    dispatch({
+      type: "parameter",
+      name,
+      value: event.currentTarget.value,
+    }))
+);
 byId("engineId").addEventListener("change", (event) =>
   dispatch({
     type: "engine",

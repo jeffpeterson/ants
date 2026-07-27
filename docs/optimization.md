@@ -665,6 +665,34 @@ preset because it produced the strongest repeated stress score. It is not promot
 the default until the preregistered scout-lifecycle and follower-floor factorial
 resolves that failure and passes the held-out suites.
 
+### Completed scout-lifecycle candidate
+
+The first hypothesis correctly found a lifecycle hole but predicted too narrow a cause:
+an unarmed scout can become stranded whenever other ants cover its local frontier. The
+completed lifecycle makes that locally exhausted scout eligible to return without
+consuming randomness or returning it on the same observation. Covered branches that
+still lead away from home remain exploration progress.
+
+Completing the lifecycle made the old `20%/s` return hazard too eager. A rate sweep over
+`20%`, `10%`, `5%`, `2%`, `1%`, and `0.5%` retained `1%/s`:
+
+| Three-run suite | Deployed | Complete, 1%/s | Deployed failed graphs | Candidate failed graphs |
+| --------------- | -------: | -------------: | ---------------------: | ----------------------: |
+| Screening       |    78.41 |          79.44 |                     0% |                      0% |
+| Stress          |    34.08 |          66.06 |                    25% |                      0% |
+| Validation      |    72.98 |          72.83 |                     0% |                      0% |
+
+At eight seeds per fresh confirmation graph, the candidate improved the mean score
+`71.57 → 72.12`, discovery, throughput, adaptation, utilization, and participation.
+However, one of 192 runs missed the adaptation horizon; the failed-graph rate rose from
+`0%` to `4.2%` and the seed floor fell from `48.93` to `42.02`.
+
+A `1%` follower floor removed that confirmation failure and scored `73.10`, but its
+three-run validation seed floor remained below the deployed control (`44.26` versus
+`63.60`). The safe default therefore remains frontier-only. **Complete scout lifecycle**
+exposes the `1%/s` candidate as a reproducible preset while bounded food propagation and
+finite-food tests continue.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or
