@@ -302,8 +302,8 @@ These predictions are recorded before aggregate benchmarking:
 2. Increasing the persistent half-life by roughly two orders of magnitude over the food
    half-life will improve sparse-field homing without preserving stale food routes.
 3. Persistent edge coverage plus finite escape-to-home will reduce time spent in
-   cul-de-sacs; a threshold near two locally exhausted choices should balance coverage
-   and premature returns.
+   cul-de-sacs; the initial blocked-choice hypothesis predicted that a threshold near
+   two choices would balance coverage and premature returns.
 4. Food deposition accepted only on strictly homeward persistent-field moves will
    eliminate food mass laid by lost carriers and improve trail focus.
 5. A moderate response to approaching opposite-direction traffic will improve early
@@ -313,16 +313,36 @@ These predictions are recorded before aggregate benchmarking:
    intermediate probability may adapt better after food moves than unconditional
    joining.
 
-Shared coverage must remain a novelty cue rather than a failure predicate. A first wave
-can chart an edge before the rest of the wave reaches it; treating that collective mark
-as exhaustion makes every following ant retreat. Escape is therefore eligible only when
-no non-U-turn branch is either unwalked or outward/equal in the local home field.
+The blocked-choice hypothesis was rejected during the mechanism check: it limited valid
+travel on established outbound trails. Shared coverage must remain a novelty cue rather
+than a failure predicate. A first wave can chart an edge before the rest reaches it, so
+covered branches descending the home field must remain valid without a time or choice
+limit. Choosing an unwalked edge now arms one frontier bit; only an armed scout that
+later finds neither an unwalked nor downhill non-U-turn branch is eligible to return.
 
 The causal candidates are home-only, home plus escape, home plus food-progress gating,
 home plus both, and cautious/balanced/eager social variants. Promotion requires all
 local invariants to pass, no increase in stranded or no-delivery runs, improved
 homebound progress, and better paired cycle efficiency on held-out maps. Aggregate score
 remains secondary to those mechanism-specific checks.
+
+### Frontier-phase mechanism check
+
+The frontier bit was compared with the rejected blocked-choice rule before adding local
+encounters. On 12 paired 200-node maps run for 80 simulated seconds, the corrected rule
+expanded far-map coverage and delivery:
+
+| Rule                     | Deliveries | Signaled nodes / 2,400 | Covered edges |
+| ------------------------ | ---------: | ---------------------: | ------------: |
+| Blocked-choice return    |         42 |                  1,310 |         2,132 |
+| Frontier bit, 20%/s exit |        358 |                  2,345 |         3,133 |
+
+On 24 paired 24-node held-out maps, the old rule delivered `7,390` loads versus `7,288`
+for the frontier rule, a `1.4%` short-map advantage that does not justify restoring the
+invalid outbound limit. Exit rates from `8.3%/s` through `95%/s` were screened
+separately; `20%/s` had the best held-out delivery total among frontier candidates at
+the 80-second horizon. Recruitment experiments should recover short-map convergence
+without weakening the frontier invariant.
 
 ## Run the evaluator
 

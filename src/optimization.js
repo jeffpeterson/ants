@@ -33,7 +33,6 @@ export const OPTIMIZED_KEYS = Object.freeze([
 
 export const EVALUATED_KEYS = Object.freeze([
   ...OPTIMIZED_KEYS,
-  "backtrackAfter",
   "homewardPreference",
   "foodTrailModel",
 ]);

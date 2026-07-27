@@ -445,13 +445,13 @@ Deno.test("a scout treats its incoming edge as walked immediately", () => {
   assertEquals(choices.map(({ probability }) => probability), [0, 1]);
 });
 
-Deno.test("the blocked-choice threshold starts strictly homeward escape", () => {
+Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
   const initial = createSimulation({
     seed: 29,
     params: {
       antCount: 8,
-      backtrackAfter: 2,
-      stopExploreChance: 0,
+      speed: 0.04,
+      stopExploreChance: 0.95,
     },
   });
   const node = initial.graph.nodes.find(({ id }) =>
@@ -465,8 +465,16 @@ Deno.test("the blocked-choice threshold starts strictly homeward escape", () => 
   );
   slow[initial.graph.hill] = 1;
   slow[node] = 0.4;
-  const stateFor = (blockedChoices) => ({
+  const chance = explorationStopProbability(
+    initial.params.stopExploreChance,
+    0.25,
+  );
+  const rngSeed = Array.from({ length: 100 }, (_, seed) => seed).find((seed) =>
+    nextRandom(seed)[0] < chance
+  );
+  const stateFor = (frontierArmed) => ({
     ...initial,
+    rngSeed,
     pheromones: {
       ...initial.pheromones,
       slow,
@@ -477,31 +485,31 @@ Deno.test("the blocked-choice threshold starts strictly homeward escape", () => 
     ants: [{
       ...initial.ants[0],
       node,
-      searchState: { kind: "explore" },
-      blockedChoices,
+      searchState: { kind: "explore", frontierArmed },
     }],
   });
 
-  const beforeThreshold = stepSimulation(stateFor(0), 0.001).ants[0];
-  assertEquals(beforeThreshold.searchState.kind, "explore");
-  assertEquals(beforeThreshold.blockedChoices, 1);
+  const unarmed = stepSimulation(stateFor(false), 0.25).ants[0];
+  assertEquals(unarmed.searchState, {
+    kind: "explore",
+    frontierArmed: false,
+  });
 
-  const atThreshold = stepSimulation(stateFor(1), 0.001).ants[0];
-  assertEquals(atThreshold.searchState.kind, "escape");
-  assertEquals(atThreshold.edge.escaping, true);
+  const armed = stepSimulation(stateFor(true), 0.25).ants[0];
+  assertEquals(armed.searchState.kind, "escape");
+  assertEquals(armed.edge.escaping, true);
   assert(
-    slow[atThreshold.edge.to] > slow[node],
+    slow[armed.edge.to] > slow[node],
     "Escape must choose a strictly higher home-potential endpoint",
   );
 });
 
-Deno.test("collective edge coverage does not make outward scouts retreat", () => {
+Deno.test("covered downhill travel never makes an armed scout retreat", () => {
   const initial = createSimulation({
     seed: 29,
     params: {
       antCount: 8,
-      backtrackAfter: 2,
-      stopExploreChance: 0,
+      stopExploreChance: 0.95,
     },
   });
   const node = initial.graph.nodes.find(({ id }) =>
@@ -519,8 +527,7 @@ Deno.test("collective edge coverage does not make outward scouts retreat", () =>
     ...initial.ants[0],
     node,
     previous: initial.graph.adjacency[node][0],
-    searchState: { kind: "explore" },
-    blockedChoices: 1,
+    searchState: { kind: "explore", frontierArmed: true },
   };
   const stepped = stepSimulation({
     ...initial,
@@ -534,12 +541,57 @@ Deno.test("collective edge coverage does not make outward scouts retreat", () =>
     ants: [ant],
   }, 0.001).ants[0];
 
-  assertEquals(stepped.searchState.kind, "explore");
-  assertEquals(stepped.blockedChoices, 0);
+  assertEquals(stepped.searchState, {
+    kind: "explore",
+    frontierArmed: true,
+  });
   assert(
     slow[stepped.edge.to] <= slow[node],
     "A covered outward branch must still count as exploration progress",
   );
+});
+
+Deno.test("choosing an unwalked edge arms the scout frontier", () => {
+  const initial = createSimulation({
+    seed: 37,
+    params: {
+      antCount: 8,
+      stopExploreChance: 0,
+      unchartedPreference: 1,
+    },
+  });
+  const node = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    !initial.graph.foods.includes(id) &&
+    initial.graph.adjacency[id].length > 1
+  ).id;
+  const previous = initial.graph.adjacency[node][0];
+  const unwalked = initial.graph.adjacency[node][1];
+  const ant = {
+    ...initial.ants[0],
+    node,
+    previous,
+    searchState: { kind: "explore", frontierArmed: false },
+  };
+  const stepped = stepSimulation({
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      slowEdges: Object.fromEntries(
+        initial.graph.edges.map(({ id }) => [
+          id,
+          id === edgeKey(node, unwalked) ? 0 : 1,
+        ]),
+      ),
+    },
+    ants: [ant],
+  }, 0.001).ants[0];
+
+  assertEquals(stepped.edge.to, unwalked);
+  assertEquals(stepped.searchState, {
+    kind: "explore",
+    frontierArmed: true,
+  });
 });
 
 Deno.test("escape ends and resets only at home", () => {
@@ -561,7 +613,6 @@ Deno.test("escape ends and resets only at home", () => {
         neighbor !== initial.graph.hill
       ) ?? null,
     searchState: { kind: "escape" },
-    blockedChoices: 2,
     edge: {
       from: node,
       to: initial.graph.hill,
@@ -575,7 +626,6 @@ Deno.test("escape ends and resets only at home", () => {
   assertEquals(stepped.ants[0].node, initial.graph.hill);
   assertEquals(stepped.ants[0].edge, null);
   assertEquals(stepped.ants[0].searchState, { kind: "follow" });
-  assertEquals(stepped.ants[0].blockedChoices, 0);
 });
 
 Deno.test("default carriers ignore food signal and follow the home field", () => {
@@ -897,7 +947,6 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   [
     "exploreRate",
     "stopExploreChance",
-    "backtrackAfter",
     "exploreSignalBias",
     "unchartedPreference",
     "reversePenalty",

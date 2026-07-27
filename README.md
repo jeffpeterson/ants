@@ -116,11 +116,12 @@ the default scout prefers those unwalked options. Unwalked-edge priority can sof
 preference. Scouts otherwise descend the endpoint-derived persistent slope by default,
 so exploration tends away from home while homing follows increasing levels.
 
-An explorer counts consecutive junctions without an unwalked non-reverse edge. At the
-configured limit—or by an adjustable per-second chance while locally blocked—it enters
-escape mode and strictly follows increasing persistent levels home. The ant stores only
-that small counter, one mode bit, and its incoming edge; it has no route or visited set.
-Escape traffic does not refresh persistent coverage.
+Choosing an unwalked edge arms one frontier bit. An armed scout becomes eligible for the
+adjustable per-second return chance only when it can find neither an unwalked
+non-reverse edge nor a covered branch descending the home field. Escape mode then
+strictly follows increasing persistent levels home. Established downhill travel is never
+limited. The ant stores only that bit, its mode, and its incoming edge; it has no route
+or visited set. Escape traffic does not refresh persistent coverage.
 
 ## Current-engine invariants
 
@@ -136,12 +137,11 @@ Escape traffic does not refresh persistent coverage.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
 - “Unwalked” means an incident edge has no persistent coverage mark; it is not a
   personal visited set or a graph-wide query. Shared coverage is only a novelty cue,
-  never proof of a dead end. A scout is locally blocked only when every non-U-turn
-  branch is both charted and higher in the home field.
+  never proof of a dead end. Only a frontier-armed scout can return from local
+  exhaustion, and covered downhill branches always remain valid outbound progress.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
-  incident-edge coverage, edge length, mode, a bounded failure count, and seeded
-  randomness. It never reads a route, visited set, shortest-path result, or graph-wide
-  statistic.
+  incident-edge coverage, edge length, mode, one frontier bit, and seeded randomness. It
+  never reads a route, visited set, shortest-path result, or graph-wide statistic.
 - Ant speed is constant in physical graph units. Long edges and routes take
   proportionally longer to traverse.
 - Simulation rate scales the complete clock rather than ant movement alone, preserving

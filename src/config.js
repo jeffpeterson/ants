@@ -4,7 +4,6 @@ export const ALGORITHM_KEYS = Object.freeze([
   "antCount",
   "exploreRate",
   "stopExploreChance",
-  "backtrackAfter",
   "exploreSignalBias",
   "unchartedPreference",
   "choiceFloor",

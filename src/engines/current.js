@@ -4,8 +4,7 @@ export const DEFAULTS = Object.freeze({
   mapVariation: 0.72,
   antCount: 64,
   exploreRate: 0.007,
-  stopExploreChance: 0.083,
-  backtrackAfter: 2,
+  stopExploreChance: 0.2,
   speed: 0.17,
   slowHalfLife: 3_600,
   fastHalfLife: 14.4,
@@ -59,13 +58,6 @@ export const sanitizeParams = (values = {}) => ({
     0,
     0.95,
     finiteOr(DEFAULTS.stopExploreChance, values.stopExploreChance),
-  ),
-  backtrackAfter: Math.round(
-    clamp(
-      0,
-      8,
-      finiteOr(DEFAULTS.backtrackAfter, values.backtrackAfter),
-    ),
   ),
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
   slowHalfLife: clamp(
@@ -471,8 +463,7 @@ const makeAnt = (id, hill) => ({
   previous: null,
   tripDistance: 0,
   turnAround: null,
-  searchState: { kind: "explore" },
-  blockedChoices: 0,
+  searchState: { kind: "explore", frontierArmed: false },
   exploreChoices: 0,
   followChoices: 0,
   trips: 0,
@@ -590,6 +581,12 @@ const signalValue = (signal, node, neighbor) =>
 const signalPolarity = (signal, node, neighbor) =>
   signal.edgeField ? 0 : relativeGradient(signal.field, node, neighbor);
 
+const edgeCoverage = (pheromones, node, neighbor) =>
+  pheromones.slowEdges?.[edgeKey(node, neighbor)] ?? 0;
+
+const isUnwalked = (pheromones, node, neighbor) =>
+  edgeCoverage(pheromones, node, neighbor) <= EPSILON;
+
 const foodSignal = (pheromones, params, influence, polarity) =>
   params.foodTrailModel === "edge"
     ? {
@@ -678,9 +675,7 @@ export const choiceProbabilities = (
   }
 
   const coverageAt = (neighbor) =>
-    neighbor === discouragedNode
-      ? 1
-      : pheromones.slowEdges?.[edgeKey(node, neighbor)] ?? 0;
+    neighbor === discouragedNode ? 1 : edgeCoverage(pheromones, node, neighbor);
   const hasUncharted = neighbors.some((neighbor) => coverageAt(neighbor) <= EPSILON);
   return normalizeChoices(
     neighbors.map((neighbor) => ({
@@ -773,8 +768,8 @@ const hasExplorationProgress = (ant, graph, pheromones) => {
   return graph.adjacency[ant.node].some((neighbor) =>
     neighbor !== ant.previous &&
     (
-      (pheromones.slowEdges?.[edgeKey(ant.node, neighbor)] ?? 0) <= EPSILON ||
-      (pheromones.slow[neighbor] ?? 0) <= here + EPSILON
+      isUnwalked(pheromones, ant.node, neighbor) ||
+      (pheromones.slow[neighbor] ?? 0) < here - EPSILON
     )
   );
 };
@@ -868,26 +863,6 @@ const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   const continuing = ant.searchState.kind === "explore";
   const starting = !continuing && (!hasFoodward || exploreDraw < params.exploreRate);
   const exploring = continuing || starting;
-  const progressing = hasExplorationProgress(ant, graph, pheromones);
-  const blockedChoices = exploring && !progressing ? ant.blockedChoices + 1 : 0;
-  if (
-    exploring &&
-    (
-      graph.adjacency[ant.node].every((neighbor) => neighbor === ant.previous) ||
-      (
-        params.backtrackAfter > 0 &&
-        blockedChoices >= params.backtrackAfter
-      )
-    )
-  ) {
-    return startEscapeEdge(
-      { ...ant, blockedChoices },
-      graph,
-      pheromones,
-      params,
-      choiceSeed,
-    );
-  }
   const probabilities = exploring
     ? choiceProbabilities(
       ant.node,
@@ -900,14 +875,20 @@ const startSearchEdge = (ant, graph, pheromones, params, seed) => {
     : foodward;
   const [to, nextSeed] = chooseWithSeed(probabilities, choiceSeed);
   const edge = movementEdge(ant, graph, to, { exploring });
-  const searchState = exploring ? { kind: "explore" } : { kind: "follow" };
+  const frontierArmed = continuing && ant.searchState.frontierArmed === true;
+  const searchState = exploring
+    ? {
+      kind: "explore",
+      frontierArmed: frontierArmed ||
+        isUnwalked(pheromones, ant.node, to),
+    }
+    : { kind: "follow" };
   return [
     {
       ...ant,
       searchState,
       exploreChoices: ant.exploreChoices + Number(exploring),
       followChoices: ant.followChoices + Number(!exploring),
-      blockedChoices,
       edge,
     },
     nextSeed,
@@ -973,7 +954,6 @@ const beginReturn = (ant) => {
       edge: null,
       mode: "return",
       searchState: { kind: "follow" },
-      blockedChoices: 0,
       turnAround: ant.previous,
       previous: null,
     },
@@ -996,7 +976,6 @@ const arriveSearching = (ant, graph) => {
     previous: atHill ? null : ant.edge.from,
     tripDistance: atHill ? 0 : ant.tripDistance + ant.edge.length,
     searchState: atHill ? { kind: "follow" } : ant.searchState,
-    blockedChoices: atHill ? 0 : ant.blockedChoices,
   };
   return graph.foods.includes(ant.edge.to)
     ? beginReturn(arrived)
@@ -1021,7 +1000,6 @@ const arriveReturning = (ant, graph) => {
         mode: "search",
         previous: null,
         searchState: { kind: "follow" },
-        blockedChoices: 0,
         tripDistance: 0,
         turnAround: null,
         trips: ant.trips + 1,
@@ -1210,6 +1188,9 @@ export const explorationStopProbability = (chancePerSecond, seconds) =>
 
 const maybeStopExploring = (ant, graph, pheromones, params, seed, dt) => {
   if (ant.mode !== "search" || ant.searchState.kind !== "explore") {
+    return { ant, seed };
+  }
+  if (ant.searchState.frontierArmed !== true) {
     return { ant, seed };
   }
   if (hasExplorationProgress(ant, graph, pheromones)) {
