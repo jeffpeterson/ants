@@ -98,6 +98,7 @@ export const trailSegments = (simulation) => {
 const exploringKinds = new Set([
   "backtrack",
   "discover",
+  "escape",
   "explore",
   "probe",
 ]);

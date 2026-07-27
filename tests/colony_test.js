@@ -143,6 +143,10 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
     Object.keys(initial.pheromones.fastEdges).toSorted(),
     initial.graph.edges.map(({ id }) => id).toSorted(),
   );
+  assertEquals(
+    Object.keys(initial.pheromones.slowEdges).toSorted(),
+    initial.graph.edges.map(({ id }) => id).toSorted(),
+  );
 });
 
 Deno.test("the hill remains the sole anchored persistent source", () => {
@@ -331,6 +335,11 @@ Deno.test("polarity can climb, descend, or be ignored", () => {
 Deno.test("scouts prefer uncharted endpoints before charted branches", () => {
   const pheromones = {
     slow: { 0: 0, 1: 0, 2: 0, 3: 4, 99: 1_000 },
+    slowEdges: {
+      [edgeKey(0, 1)]: 0,
+      [edgeKey(0, 2)]: 0,
+      [edgeKey(0, 3)]: 1,
+    },
     fast: { 0: 0, 1: 0, 2: 0, 3: 0 },
   };
   const choices = choiceProbabilities(
@@ -366,6 +375,10 @@ Deno.test("scouts prefer uncharted endpoints before charted branches", () => {
 Deno.test("charted scout fallback can avoid, ignore, or seek persistent signal", () => {
   const pheromones = {
     slow: { 0: 0.2, 1: 0.1, 2: 1 },
+    slowEdges: {
+      [edgeKey(0, 1)]: 1,
+      [edgeKey(0, 2)]: 1,
+    },
     fast: { 0: 0, 1: 0, 2: 0 },
   };
   const choices = (bias, previous = null) =>
@@ -385,6 +398,137 @@ Deno.test("charted scout fallback can avoid, ignore, or seek persistent signal",
   assert(choices(4)[1].probability > choices(4)[0].probability);
   assert(Math.abs(choices(0)[0].probability - 0.5) < 1e-9);
   assert(choices(0, 1)[1].probability > choices(0, 1)[0].probability);
+});
+
+Deno.test("edge coverage detects an unwalked route to a visited endpoint", () => {
+  const choices = choiceProbabilities(
+    0,
+    [1, 2],
+    {
+      slow: { 0: 0.4, 1: 0.2, 2: 0.2 },
+      slowEdges: {
+        [edgeKey(0, 1)]: 1,
+        [edgeKey(0, 2)]: 0,
+      },
+      fast: { 0: 0, 1: 0, 2: 0 },
+    },
+    parameters({
+      exploreSignalBias: 0,
+      unchartedPreference: 1,
+    }),
+    true,
+  );
+
+  assertEquals(choices.map(({ probability }) => probability), [0, 1]);
+});
+
+Deno.test("a scout treats its incoming edge as walked immediately", () => {
+  const choices = choiceProbabilities(
+    0,
+    [1, 2],
+    {
+      slow: { 0: 0.4, 1: 0.2, 2: 0.2 },
+      slowEdges: {
+        [edgeKey(0, 1)]: 0,
+        [edgeKey(0, 2)]: 0,
+      },
+      fast: { 0: 0, 1: 0, 2: 0 },
+    },
+    parameters({
+      exploreSignalBias: 0,
+      unchartedPreference: 1,
+    }),
+    true,
+    1,
+  );
+
+  assertEquals(choices.map(({ probability }) => probability), [0, 1]);
+});
+
+Deno.test("the blocked-choice threshold starts strictly uphill escape", () => {
+  const initial = createSimulation({
+    seed: 29,
+    params: {
+      antCount: 8,
+      backtrackAfter: 2,
+      stopExploreChance: 0,
+    },
+  });
+  const node = initial.graph.nodes.find(({ id }) =>
+    id !== initial.graph.hill &&
+    !initial.graph.foods.includes(id) &&
+    initial.graph.adjacency[id].length > 1
+  ).id;
+  const uphill = initial.graph.adjacency[node][0];
+  const slow = Object.fromEntries(
+    initial.graph.nodes.map(({ id }) => [id, id === uphill ? 0.8 : 0.1]),
+  );
+  slow[initial.graph.hill] = 1;
+  slow[node] = 0.4;
+  const stateFor = (blockedChoices) => ({
+    ...initial,
+    pheromones: {
+      ...initial.pheromones,
+      slow,
+      slowEdges: Object.fromEntries(
+        initial.graph.edges.map(({ id }) => [id, 1]),
+      ),
+    },
+    ants: [{
+      ...initial.ants[0],
+      node,
+      searchState: { kind: "explore" },
+      blockedChoices,
+    }],
+  });
+
+  const beforeThreshold = stepSimulation(stateFor(0), 0.001).ants[0];
+  assertEquals(beforeThreshold.searchState.kind, "explore");
+  assertEquals(beforeThreshold.blockedChoices, 1);
+
+  const atThreshold = stepSimulation(stateFor(1), 0.001).ants[0];
+  assertEquals(atThreshold.searchState.kind, "escape");
+  assertEquals(atThreshold.edge.escaping, true);
+  assert(
+    slow[atThreshold.edge.to] > slow[node],
+    "Escape must choose a strictly uphill endpoint",
+  );
+});
+
+Deno.test("escape ends and resets only at the hill", () => {
+  const initial = createSimulation({
+    seed: 31,
+    params: { antCount: 8, speed: 0.65 },
+  });
+  const node = initial.graph.adjacency[initial.graph.hill].find((neighbor) =>
+    !initial.graph.foods.includes(neighbor)
+  );
+  assert(node !== undefined);
+  const edge = initial.graph.edgeById[edgeKey(node, initial.graph.hill)];
+  const dt = Math.min(0.1, edge.length / (initial.params.speed * 2));
+  const ant = {
+    ...initial.ants[0],
+    node,
+    previous:
+      initial.graph.adjacency[node].find((neighbor) =>
+        neighbor !== initial.graph.hill
+      ) ?? null,
+    searchState: { kind: "escape" },
+    blockedChoices: 2,
+    edge: {
+      from: node,
+      to: initial.graph.hill,
+      length: edge.length,
+      progress: 1 - initial.params.speed * dt / edge.length,
+      escaping: true,
+    },
+  };
+  const stepped = stepSimulation({ ...initial, ants: [ant] }, dt);
+
+  assertEquals(stepped.ants[0].node, initial.graph.hill);
+  assertEquals(stepped.ants[0].edge, null);
+  assertEquals(stepped.ants[0].searchState, { kind: "follow" });
+  assertEquals(stepped.ants[0].blockedChoices, 0);
 });
 
 Deno.test("default carriers ignore food signal and climb the hill field", () => {
@@ -636,6 +780,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
   [
     "exploreRate",
     "stopExploreChance",
+    "backtrackAfter",
     "exploreSignalBias",
     "unchartedPreference",
     "reversePenalty",

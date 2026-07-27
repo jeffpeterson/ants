@@ -47,7 +47,8 @@ per minute. The separate simulation-rate control scales the entire simulation cl
 including movement, pheromone decay, and per-second decisions, so it changes playback
 speed without changing algorithm behavior.
 
-The colony always stores a scalar persistent level at every node:
+The colony stores a scalar persistent level at every node and a bounded coverage mark on
+every undirected edge:
 
 - The hill is the sole fixed source at level `1`.
 - A searching traversal `u → v` can propose only `persistent[u] × exp(-2 × edge.length)`
@@ -108,31 +109,34 @@ default carrier ignores the food field and climbs only the persistent hill field
 avoids reinforcing a mistaken food-marked branch during return.
 
 Every ant starts in scouting mode. Later, an independent enter-scouting chance can
-switch a follower back into it. When any adjacent endpoint has zero persistent signal,
-the default scout chooses among those uncharted options. Uncharted priority can soften
-that exclusion. Scouts otherwise descend the endpoint-derived persistent slope by
-default, so exploration tends away from the hill while homing climbs the same field. The
-U-turn weight remains the only default modifier within either tier.
+switch a follower back into it. When an incident edge has no persistent coverage mark,
+the default scout prefers those unwalked options. Unwalked-edge priority can soften that
+preference. Scouts otherwise descend the endpoint-derived persistent slope by default,
+so exploration tends away from the hill while homing climbs the same field.
 
-On every simulation update a scout has an adjustable per-second chance to stop scouting.
-This memoryless exit rule is stable across animation frame rates and stores no step
-count, timer, route, or visited set.
+An explorer counts consecutive junctions without an unwalked non-reverse edge. At the
+configured limit—or by an adjustable per-second chance while locally blocked—it enters
+escape mode and strictly climbs the persistent field to the hill. The ant stores only
+that small counter, one mode bit, and its incoming edge; it has no route or visited set.
+Escape traffic does not refresh persistent coverage.
 
 ## Current-engine invariants
 
-- Persistent pheromone is one scalar per node. Food pheromone is either one scalar per
-  node or per undirected edge, never a stored direction. Renderer arrows exist only for
-  endpoint-derived node slopes.
+- Persistent pheromone is one scalar hill potential per node plus one bounded coverage
+  mark per undirected edge. Food pheromone is either one scalar per node or per
+  undirected edge. None stores direction; renderer arrows derive only from endpoint
+  slopes.
 - The hill is pinned to `1`; every accepted non-hill persistent write is attenuated from
   the live level at the edge's other endpoint. Persistent traffic is never additive.
 - Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
   do.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
-- “Uncharted” means a zero-coverage opposite endpoint among the current node's adjacent
-  options; it is not a personal visited set or a graph-wide query.
+- “Unwalked” means an incident edge has no persistent coverage mark; it is not a
+  personal visited set or a graph-wide query.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
-  edge length, mode, and seeded randomness. It never reads a route, visited set,
-  shortest-path result, or graph-wide statistic.
+  incident-edge coverage, edge length, mode, a bounded failure count, and seeded
+  randomness. It never reads a route, visited set, shortest-path result, or graph-wide
+  statistic.
 - Ant speed is constant in physical graph units. Long edges and routes take
   proportionally longer to traverse.
 - Simulation rate scales the complete clock rather than ant movement alone, preserving

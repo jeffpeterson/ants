@@ -826,6 +826,15 @@ const sliderConfigs = [
     (value) => value * 100,
   ],
   [
+    "backtrackAfter",
+    Number,
+    (value) =>
+      Number(value) === 0
+        ? "off"
+        : `${value} blocked ${Number(value) === 1 ? "choice" : "choices"}`,
+    (value) => value,
+  ],
+  [
     "exploreSignalBias",
     (value) => Number(value) / 10,
     polarityLabel,
