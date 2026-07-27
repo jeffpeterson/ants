@@ -556,6 +556,30 @@ Deno.test("default carriers ignore food signal and follow the home field", () =>
   assert(choices[1].probability < 0.01);
 });
 
+Deno.test("homeward priority can exclude or admit non-progress branches", () => {
+  const pheromones = {
+    slow: { 0: 0.4, 1: 0.8, 2: 0.2 },
+    fast: { 0: 0, 1: 0, 2: 0 },
+    fastEdges: {},
+  };
+  const choices = (homewardPreference) =>
+    homewardProbabilities(
+      0,
+      [1, 2],
+      pheromones,
+      parameters({
+        homewardPreference,
+        returnFastInfluence: 0,
+        returnFastPolarity: 0,
+        returnSlowInfluence: 1,
+        returnSlowPolarity: 0,
+      }),
+    );
+
+  assertEquals(choices(1).map(({ probability }) => probability), [1, 0]);
+  assert(choices(0).every(({ probability }) => probability > 0));
+});
+
 Deno.test("the scouting exit control is a frame-rate-independent probability", () => {
   const perSecond = explorationStopProbability(0.2, 1);
   const fourTicks = 1 - Math.pow(
@@ -595,6 +619,52 @@ Deno.test("food signal is deposited only after pickup", () => {
   assert(Object.values(state.pheromones.fast).some((value) => value > 0));
   assert(Object.values(state.pheromones.fastEdges).some((value) => value > 0));
   assert(state.ants.some((ant) => ant.mode === "return"));
+});
+
+Deno.test("carriers deposit food signal only while making homeward progress", () => {
+  const crossing = (destinationLevel) => {
+    const initial = createSimulation({
+      seed: 37,
+      params: { antCount: 8, speed: 0.65 },
+    });
+    const edge = initial.graph.edges.find(({ a, b }) =>
+      ![a, b].includes(initial.graph.hill) &&
+      ![a, b].some((node) => initial.graph.foods.includes(node))
+    );
+    assert(edge);
+    const dt = Math.min(0.1, edge.length / (initial.params.speed * 2));
+    const slow = {
+      ...initial.pheromones.slow,
+      [edge.a]: 0.4,
+      [edge.b]: destinationLevel,
+    };
+    const ant = {
+      ...initial.ants[0],
+      node: edge.a,
+      mode: "return",
+      searchState: { kind: "follow" },
+      edge: {
+        from: edge.a,
+        to: edge.b,
+        length: edge.length,
+        progress: 1 - initial.params.speed * dt / edge.length,
+        returnTrail: "signal",
+      },
+    };
+    return stepSimulation({
+      ...initial,
+      pheromones: { ...initial.pheromones, slow },
+      ants: [ant],
+    }, dt);
+  };
+
+  const away = crossing(0.2);
+  assert(Object.values(away.pheromones.fast).every((value) => value === 0));
+  assert(Object.values(away.pheromones.fastEdges).every((value) => value === 0));
+
+  const homeward = crossing(0.8);
+  assert(Object.values(homeward.pheromones.fast).some((value) => value > 0));
+  assert(Object.values(homeward.pheromones.fastEdges).some((value) => value > 0));
 });
 
 Deno.test("food pickup reverses the incoming edge before local homing", () => {
@@ -790,6 +860,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "foodTrailModel",
     "fastInfluence",
     "outboundPolarity",
+    "homewardPreference",
     "returnFastInfluence",
     "returnSlowInfluence",
     "returnFastPolarity",

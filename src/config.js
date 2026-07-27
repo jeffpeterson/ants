@@ -19,6 +19,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "returnSlowInfluence",
   "returnFastPolarity",
   "returnSlowPolarity",
+  "homewardPreference",
   "slowHalfLife",
   "fastHalfLife",
 ]);

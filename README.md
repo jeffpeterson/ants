@@ -57,10 +57,10 @@ every undirected edge:
   loop therefore cannot amplify itself, and the initial outbound trail already rises
   toward home rather than depending on deposit freshness.
 
-Food pheromone is deposited only by an ant that has picked up food. A playground lever
-stores it either as scalar node levels or on undirected edges; both live fields are
-maintained so the model can change without resetting the colony. There are no
-directional pheromone records.
+Food pheromone is deposited at pickup and then only by a loaded ant crossing to a
+strictly higher home-potential endpoint. A playground lever stores it either as scalar
+node levels or on undirected edges; both live fields are maintained so the model can
+change without resetting the colony. There are no directional pheromone records.
 
 In node mode, option `u → v` reads the food level at the opposite endpoint `v`. The
 renderer interpolates endpoint levels along the edge and can draw their current slope:
@@ -106,7 +106,9 @@ Outbound and homebound ants have independent attraction and polarity settings. S
 an attraction or polarity control to zero removes that cue. At food, an ant reverses its
 incoming edge once, then resumes local choices; it does not retrace a stored path. The
 default carrier ignores the food field and follows only the persistent home field. This
-avoids reinforcing a mistaken food-marked branch during return.
+avoids reinforcing a mistaken food-marked branch during return. Homeward priority
+controls how strongly branches that fail to increase the home potential are suppressed;
+the default permits only locally homeward options.
 
 Every ant starts in scouting mode. Later, an independent enter-scouting chance can
 switch a follower back into it. When an incident edge has no persistent coverage mark,
@@ -128,8 +130,9 @@ Escape traffic does not refresh persistent coverage.
   slopes.
 - Home is pinned to `1`; every accepted non-home persistent write is attenuated from the
   live level at the edge's other endpoint. Persistent traffic is never additive.
-- Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
-  do.
+- Food pheromone is written only at pickup or by a loaded ant making strict local
+  home-potential progress. Outbound followers, scouts, and wandering carriers never
+  write it.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
 - “Unwalked” means an incident edge has no persistent coverage mark; it is not a
   personal visited set or a graph-wide query.

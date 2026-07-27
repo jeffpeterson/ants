@@ -895,6 +895,12 @@ const sliderConfigs = [
     (value) => value * 10,
   ],
   [
+    "homewardPreference",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
     "returnFastInfluence",
     (value) => Number(value) / 10,
     influenceLabel,

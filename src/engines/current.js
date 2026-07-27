@@ -15,6 +15,7 @@ export const DEFAULTS = Object.freeze({
   returnSlowInfluence: 3.09,
   returnFastPolarity: 0,
   returnSlowPolarity: 4,
+  homewardPreference: 1,
   exploreSignalBias: -2,
   unchartedPreference: 0.75,
   choiceFloor: 0,
@@ -119,6 +120,11 @@ export const sanitizeParams = (values = {}) => ({
     -4,
     4,
     finiteOr(DEFAULTS.returnSlowPolarity, values.returnSlowPolarity),
+  ),
+  homewardPreference: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.homewardPreference, values.homewardPreference),
   ),
   distanceInfluence: clamp(
     0,
@@ -814,8 +820,16 @@ export const homewardProbabilities = (
   previous = null,
   edgeLength = () => 1,
   edgeBias = () => 1,
-) =>
-  signalProbabilities(
+) => {
+  const here = pheromones.slow[node] ?? 0;
+  const hasHomeward = neighbors.some((neighbor) =>
+    (pheromones.slow[neighbor] ?? 0) > here + EPSILON
+  );
+  const progressBias = (neighbor) =>
+    hasHomeward && (pheromones.slow[neighbor] ?? 0) <= here + EPSILON
+      ? 1 - params.homewardPreference
+      : 1;
+  return signalProbabilities(
     node,
     neighbors,
     [
@@ -835,8 +849,9 @@ export const homewardProbabilities = (
     params,
     previous,
     edgeLength,
-    edgeBias,
+    (neighbor) => edgeBias(neighbor) * progressBias(neighbor),
   );
+};
 
 const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   if (ant.searchState.kind === "escape") {
@@ -1035,7 +1050,10 @@ const arrive = (ant, graph, pheromones, params) => {
     : [];
   const result = returning ? arriveReturning(ant, graph) : arriveSearching(ant, graph);
   const foundFood = !returning && graph.foods.includes(ant.edge.to);
-  const fastDeposits = returning || foundFood
+  const homeward = returning &&
+    (pheromones.slow[ant.edge.to] ?? 0) >
+      (pheromones.slow[ant.edge.from] ?? 0) + EPSILON;
+  const fastDeposits = homeward || foundFood
     ? [
       {
         channel: "fast",

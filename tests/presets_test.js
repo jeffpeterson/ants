@@ -126,6 +126,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     distanceInfluence: 10,
     fastInfluence: 10,
     outboundPolarity: 10,
+    homewardPreference: 100,
     returnFastInfluence: 10,
     returnSlowInfluence: 10,
     returnFastPolarity: 10,

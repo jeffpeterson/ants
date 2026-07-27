@@ -51,6 +51,8 @@ export const CONTROL_HELP = Object.freeze({
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:
     "Outbound response to food-signal slope: negative prefers lower levels, zero ignores slope, and positive prefers higher levels.",
+  homewardPreference:
+    "Reduce the weight of non-homeward branches whenever a higher persistent home-potential neighbor is locally available. At 100%, carriers choose only homeward options.",
   returnFastInfluence:
     "Homebound attraction to food-signal strength at each branch’s opposite endpoint.",
   returnSlowInfluence:
