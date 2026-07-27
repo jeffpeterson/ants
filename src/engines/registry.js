@@ -8,13 +8,15 @@ export const CURRENT_ENGINE_REVISION = "bce2a56529cfa6f3778dd21f7007de9b9a497330
 const currentEngine = Object.freeze({
   id: CURRENT_ENGINE_ID,
   version: CURRENT_ENGINE_VERSION,
-  name: "Scalar field",
+  name: "Home potential",
   revision: CURRENT_ENGINE_REVISION,
   family: "local-scalar",
   traits: Object.freeze([
     "local-memory",
     "node-and-edge-fields",
     "temporary-exploration",
+    "home-potential",
+    "finite-escape",
     "live-food",
   ]),
   defaults: current.DEFAULTS,

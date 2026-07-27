@@ -23,7 +23,9 @@ const freezeGraph = (graph) => {
 export const shortRevision = (engine) => engine.revision.slice(0, 7);
 
 export const engineLabel = (engine) =>
-  `${engine.id} — ${engine.name} · ${shortRevision(engine)}`;
+  engine.id === CURRENT_ENGINE_ID
+    ? `Current — ${engine.name} · ${engine.id} · ${shortRevision(engine)}`
+    : `${engine.id} — ${engine.name} · ${shortRevision(engine)}`;
 
 export const engineTooltip = (engine) => {
   const behavior = engine.id === "A0"
@@ -35,7 +37,9 @@ export const engineTooltip = (engine) => {
 };
 
 export const engineNote = (engine) =>
-  engine.id === "A0"
+  engine.id === CURRENT_ENGINE_ID
+    ? `Live successor to B1 (${shortRevision(engine)}) · ${engine.traits.join(" · ")}`
+    : engine.id === "A0"
     ? `Commit ${
       shortRevision(engine)
     } · one active food; moving it resets the run. Other placed foods remain parked.`

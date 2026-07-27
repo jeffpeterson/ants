@@ -151,10 +151,12 @@ Escape traffic does not refresh persistent coverage.
 
 ## Historical engines
 
-The engine selector runs seven behavior-changing revisions, A0–A4 and B0–B1, inside the
-latest playground. Switching engines preserves the exact current graph, home, and placed
-food, but resets ants and trails because their state schemas are incompatible.
-Historical source files are byte-checked against their Git blobs.
+The engine selector runs the live `Current — Home potential` engine and seven
+behavior-changing revisions, A0–A4 and B0–B1, inside the latest playground. B1 remains
+an unchanged benchmark; Current is its actively developed successor. Switching engines
+preserves the exact graph, home, and placed food, but resets ants and trails because
+their state schemas are incompatible. Historical source files are byte-checked against
+their Git blobs.
 
 The selector starts each revision from its archived behavioral defaults while retaining
 only shared resources such as ant count and speed. Unsupported current-engine controls
