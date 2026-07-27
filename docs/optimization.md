@@ -151,7 +151,8 @@ Evaluate the winner from a saved optimizer report, including at browser fidelity
 deno task evaluate -- \
   --input=.runs/colony-search.json \
   --suite=validation \
-  --dt=0.016666666666666666
+  --dt=0.016666666666666666 \
+  --out=.runs/winner-browser-fidelity.json
 ```
 
 Run the deterministic Latin-hypercube search, elite refinement, full training pass, and

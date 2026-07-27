@@ -60,14 +60,19 @@ const results = candidates.map(({ id, params }) => {
     scenarios: options.full === "true" ? evaluation.scenarios : undefined,
   };
 });
+const report = {
+  suite: suiteName,
+  scenarioCount: scenarios.length,
+  dt,
+  results,
+};
+const output = `${JSON.stringify(report, null, 2)}\n`;
 
-console.log(JSON.stringify(
-  {
-    suite: suiteName,
-    scenarioCount: scenarios.length,
-    dt,
-    results,
-  },
-  null,
-  2,
-));
+if (typeof options.out === "string" && options.out !== "true") {
+  const slash = options.out.lastIndexOf("/");
+  if (slash > 0) await Deno.mkdir(options.out.slice(0, slash), { recursive: true });
+  await Deno.writeTextFile(options.out, output);
+  console.error(`wrote ${options.out}`);
+}
+
+console.log(output.trimEnd());
