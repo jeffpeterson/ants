@@ -253,6 +253,13 @@
             <h2>Pheromones</h2>
           </div>
           <div class="slider-list">
+            <label class="slider-row signal-food" for="foodTrailModel">
+              <span><span><strong class="food-name">Food</strong>-trail storage</span></span>
+              <select id="foodTrailModel">
+                <option value="node" selected>Node levels</option>
+                <option value="edge">Undirected edges</option>
+              </select>
+            </label>
             <label class="slider-row signal-persistent" for="slowHalfLife">
               <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">42 s</output></span>
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">

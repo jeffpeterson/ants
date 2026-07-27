@@ -167,6 +167,13 @@ held-out validation:
 deno task optimize -- --out=.runs/colony-search.json
 ```
 
+Use `--model=edge` to optimize the undirected-edge food-trail countermodel. Food
+polarities are fixed to zero in that search because an undirected scalar has no slope:
+
+```sh
+deno task optimize -- --model=edge --out=.runs/edge-search.json
+```
+
 Useful controls include `--samples`, `--rounds`, `--elite`, `--per-elite`,
 `--finalists`, `--validate`, `--search-seed`, and `--dt`. Progress goes to stderr and
 the versioned report goes to stdout as JSON. Graph seeds and colony random seeds are

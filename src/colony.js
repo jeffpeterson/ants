@@ -16,6 +16,7 @@ export const DEFAULTS = Object.freeze({
   returnSlowPolarity: 4,
   exploreSignalBias: 0,
   choiceFloor: 0,
+  foodTrailModel: "node",
   headingInfluence: 1.6,
   fastDeposit: 0.72,
   distanceInfluence: 1,
@@ -69,6 +70,7 @@ export const sanitizeParams = (values = {}) => ({
     1,
     finiteOr(DEFAULTS.choiceFloor, values.choiceFloor),
   ),
+  foodTrailModel: values.foodTrailModel === "edge" ? "edge" : "node",
   headingInfluence: clamp(
     0,
     4,
@@ -421,9 +423,13 @@ export const shortestRouteToFood = (graph, start = graph.hill) =>
 
 const emptyField = (graph) => Object.fromEntries(graph.nodes.map(({ id }) => [id, 0]));
 
+const emptyEdgeField = (graph) =>
+  Object.fromEntries(graph.edges.map(({ id }) => [id, 0]));
+
 const emptyPheromones = (graph) => ({
   slow: { ...emptyField(graph), [graph.hill]: 1 },
   fast: emptyField(graph),
+  fastEdges: emptyEdgeField(graph),
 });
 
 const graphParameters = (params) => ({
@@ -520,6 +526,7 @@ const decayField = (field, halfLife, dt) => {
 export const decayPheromones = (pheromones, params, dt) => ({
   slow: decayField(pheromones.slow, params.slowHalfLife, dt),
   fast: decayField(pheromones.fast, params.fastHalfLife, dt),
+  fastEdges: decayField(pheromones.fastEdges ?? {}, params.fastHalfLife, dt),
 });
 
 export const trailGradient = (field, edge) =>
@@ -539,6 +546,29 @@ const relativeGradient = (field, node, neighbor) => {
   return (there - here) / Math.max(EPSILON, here + there);
 };
 
+const signalValue = (signal, node, neighbor) =>
+  signal.edgeField
+    ? signal.field[edgeKey(node, neighbor)] ?? 0
+    : signal.field[neighbor] ?? 0;
+
+const signalPolarity = (signal, node, neighbor) =>
+  signal.edgeField ? 0 : relativeGradient(signal.field, node, neighbor);
+
+const foodSignal = (pheromones, params, influence, polarity) =>
+  params.foodTrailModel === "edge"
+    ? {
+      field: pheromones.fastEdges,
+      edgeField: true,
+      influence,
+      polarity: 0,
+    }
+    : {
+      field: pheromones.fast,
+      edgeField: false,
+      influence,
+      polarity,
+    };
+
 const signalProbabilities = (
   node,
   neighbors,
@@ -552,24 +582,26 @@ const signalProbabilities = (
     influence > EPSILON || Math.abs(polarity) > EPSILON
   );
   const signaled = neighbors.filter((neighbor) =>
-    active.some(({ field }) => field[neighbor] > EPSILON)
+    active.some((signal) => signalValue(signal, node, neighbor) > EPSILON)
   );
   if (signaled.length === 0) return [];
   return normalizeChoices(
     neighbors.map((neighbor) => {
-      const marked = active.some(({ field }) => field[neighbor] > EPSILON);
+      const marked = active.some((signal) =>
+        signalValue(signal, node, neighbor) > EPSILON
+      );
       const visibility = Math.pow(
         1 / edgeLength(neighbor),
         params.distanceInfluence,
       );
       const attraction = active.reduce(
-        (sum, { field, influence }) => sum + influence * field[neighbor],
+        (sum, signal) => sum + signal.influence * signalValue(signal, node, neighbor),
         params.baseWeight,
       );
       const polarity = active.reduce(
         (sum, signal) =>
           sum + signal.polarity *
-            relativeGradient(signal.field, node, neighbor),
+            signalPolarity(signal, node, neighbor),
         0,
       );
       const reversal = neighbor === previous ? params.reversePenalty : 1;
@@ -596,11 +628,12 @@ export const choiceProbabilities = (
     return signalProbabilities(
       node,
       neighbors,
-      [{
-        field: pheromones.fast,
-        influence: params.fastInfluence,
-        polarity: params.outboundPolarity,
-      }],
+      [foodSignal(
+        pheromones,
+        params,
+        params.fastInfluence,
+        params.outboundPolarity,
+      )],
       params,
       discouragedNode,
       edgeLength,
@@ -742,13 +775,15 @@ const startReturnEdge = (ant, graph, pheromones, params, seed) => {
     ant.node,
     graph.adjacency[ant.node],
     [
-      {
-        field: pheromones.fast,
-        influence: params.returnFastInfluence,
-        polarity: params.returnFastPolarity,
-      },
+      foodSignal(
+        pheromones,
+        params,
+        params.returnFastInfluence,
+        params.returnFastPolarity,
+      ),
       {
         field: pheromones.slow,
+        edgeField: false,
         influence: params.returnSlowInfluence,
         polarity: params.returnSlowPolarity,
       },
@@ -863,13 +898,13 @@ const arrive = (ant, graph, params) => {
   const slowDeposits = returning ? [] : [
     {
       channel: "slow",
-      node: ant.edge.from,
+      target: ant.edge.from,
       amount: ant.edge.homeFrom,
       combine: "max",
     },
     {
       channel: "slow",
-      node: ant.edge.to,
+      target: ant.edge.to,
       amount: ant.edge.homeTo,
       combine: "max",
     },
@@ -877,12 +912,20 @@ const arrive = (ant, graph, params) => {
   const result = returning ? arriveReturning(ant, graph) : arriveSearching(ant, graph);
   const foundFood = !returning && graph.foods.includes(ant.edge.to);
   const fastDeposits = returning || foundFood
-    ? [{
-      channel: "fast",
-      node: ant.edge.to,
-      amount: params.fastDeposit,
-      combine: "add",
-    }]
+    ? [
+      {
+        channel: "fast",
+        target: ant.edge.to,
+        amount: params.fastDeposit,
+        combine: "add",
+      },
+      {
+        channel: "fastEdges",
+        target: edgeKey(ant.edge.from, ant.edge.to),
+        amount: params.fastDeposit,
+        combine: "add",
+      },
+    ]
     : [];
   return {
     ...result,
@@ -979,9 +1022,9 @@ const addDeposits = (pheromones, deposits) =>
       ...fields,
       [deposit.channel]: {
         ...fields[deposit.channel],
-        [deposit.node]: deposit.combine === "max"
-          ? Math.max(fields[deposit.channel][deposit.node], deposit.amount)
-          : fields[deposit.channel][deposit.node] + deposit.amount,
+        [deposit.target]: deposit.combine === "max"
+          ? Math.max(fields[deposit.channel][deposit.target], deposit.amount)
+          : fields[deposit.channel][deposit.target] + deposit.amount,
       },
     }),
     pheromones,
@@ -1074,7 +1117,9 @@ export const updateParams = (state, patch) => {
     ...state,
     params,
     rngSeed: generated.rngSeed,
-    ants: difference < 0
+    ants: difference === 0
+      ? state.ants
+      : difference < 0
       ? state.ants.slice(0, params.antCount)
       : [...state.ants, ...generated.ants],
   };
@@ -1192,14 +1237,35 @@ export const setEndpoint = (state, kind, nodeId) => {
   });
 };
 
+const foodLevelForMove = (state, node, neighbor) =>
+  state.params.foodTrailModel === "edge"
+    ? state.pheromones.fastEdges[edgeKey(node, neighbor)] ?? 0
+    : state.pheromones.fast[neighbor] ?? 0;
+
+const activeFoodValues = (state) =>
+  Object.values(
+    state.params.foodTrailModel === "edge"
+      ? state.pheromones.fastEdges
+      : state.pheromones.fast,
+  );
+
+const routeFoodSignal = (state, route) =>
+  state.params.foodTrailModel === "edge"
+    ? route.slice(1).reduce(
+      (sum, node, index) =>
+        sum + state.pheromones.fastEdges[edgeKey(route[index], node)],
+      0,
+    )
+    : route.reduce(
+      (sum, node) => sum + state.pheromones.fast[node],
+      0,
+    );
+
 export const deriveMetrics = (state) => {
-  const fastValues = Object.values(state.pheromones.fast);
+  const fastValues = activeFoodValues(state);
   const totalFast = fastValues.reduce((sum, value) => sum + value, 0);
   const selected = dominantFoodRoute(state);
-  const selectedSignal = selected?.route.reduce(
-    (sum, node) => sum + state.pheromones.fast[node],
-    0,
-  ) ?? 0;
+  const selectedSignal = selected ? routeFoodSignal(state, selected.route) : 0;
   const signalFocus = totalFast <= EPSILON ? 0 : selectedSignal / totalFast;
   const efficiency = selected ? state.stats.shortestDistance / selected.distance : 0;
 
@@ -1223,7 +1289,7 @@ export const deriveMetrics = (state) => {
 };
 
 export const dominantFoodRoute = (state) => {
-  if (Object.values(state.pheromones.fast).every((value) => value <= EPSILON)) {
+  if (activeFoodValues(state).every((value) => value <= EPSILON)) {
     return null;
   }
   const visit = (node, route, routeDistance, seen) => {
@@ -1233,14 +1299,14 @@ export const dominantFoodRoute = (state) => {
     const options = state.graph.adjacency[node]
       .filter((neighbor) =>
         !seen.includes(neighbor) &&
-        state.pheromones.fast[neighbor] > EPSILON
+        foodLevelForMove(state, node, neighbor) > EPSILON
       )
       .map((neighbor) => {
         const edge = state.graph.edgeById[edgeKey(node, neighbor)];
         return {
           node: neighbor,
           edge,
-          score: state.pheromones.fast[neighbor] / edge.length,
+          score: foodLevelForMove(state, node, neighbor) / edge.length,
         };
       })
       .toSorted((first, second) => second.score - first.score);

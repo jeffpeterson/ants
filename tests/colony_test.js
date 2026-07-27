@@ -14,6 +14,7 @@ import {
   removeFood,
   stepSimulation,
   trailGradient,
+  updateParams,
 } from "../src/colony.js";
 import {
   algorithmPreset,
@@ -136,6 +137,11 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
     Math.abs(trailGradient({ 0: 0.2, 1: 0.7 }, { a: 0, b: 1 }) - 0.5) <
       1e-12,
   );
+  const initial = createSimulation({ seed: 1 });
+  assertEquals(
+    Object.keys(initial.pheromones.fastEdges).toSorted(),
+    initial.graph.edges.map(({ id }) => id).toSorted(),
+  );
 });
 
 Deno.test("a branch reads the signal at its opposite node", () => {
@@ -173,6 +179,32 @@ Deno.test("the unmarked branch floor permits local error correction", () => {
     choices(1).find(({ node }) => node === 1)?.probability >
       choices(1).find(({ node }) => node === 2)?.probability,
   );
+});
+
+Deno.test("edge food trails are local, scalar, and undirected", () => {
+  const pheromones = {
+    slow: { 0: 0, 1: 0, 2: 0 },
+    fast: { 0: 0, 1: 0, 2: 0 },
+    fastEdges: { [edgeKey(0, 1)]: 1, [edgeKey(0, 2)]: 3 },
+  };
+  const choices = (polarity) =>
+    choiceProbabilities(
+      0,
+      [1, 2],
+      pheromones,
+      parameters({
+        foodTrailModel: "edge",
+        fastInfluence: 2,
+        outboundPolarity: polarity,
+      }),
+    );
+  const expected = (0.06 + 2 * 3) / (0.06 + 2 * 1);
+  assert(
+    Math.abs(choices(4)[1].probability / choices(4)[0].probability - expected) <
+      1e-9,
+  );
+  assertEquals(choices(-4), choices(4));
+  assertEquals(edgeKey(0, 1), edgeKey(1, 0));
 });
 
 Deno.test("polarity can climb, descend, or be ignored", () => {
@@ -243,11 +275,13 @@ Deno.test("food signal is deposited only after pickup", () => {
   });
   state = run(state, 2);
   assert(Object.values(state.pheromones.fast).every((value) => value === 0));
+  assert(Object.values(state.pheromones.fastEdges).every((value) => value === 0));
   for (let step = 0; step < 2_000 && state.stats.discoveries === 0; step += 1) {
     state = stepSimulation(state, 0.25);
   }
   assert(state.stats.discoveries > 0);
   assert(Object.values(state.pheromones.fast).some((value) => value > 0));
+  assert(Object.values(state.pheromones.fastEdges).some((value) => value > 0));
   assert(state.ants.some((ant) => ant.mode === "return"));
 });
 
@@ -366,6 +400,16 @@ Deno.test("food edits preserve the running colony", () => {
   assertEquals(JSON.stringify(warm), originalSnapshot);
 });
 
+Deno.test("food-trail storage switches without resetting the colony", () => {
+  const warm = adaptationFixture();
+  const changed = updateParams(warm, { foodTrailModel: "edge" });
+  assert(changed.ants === warm.ants);
+  assert(changed.pheromones === warm.pheromones);
+  assertEquals(changed.elapsed, warm.elapsed);
+  assertEquals(changed.stats, warm.stats);
+  assertEquals(changed.params.foodTrailModel, "edge");
+});
+
 Deno.test("the colony adapts to moved food without resetting", () => {
   const warm = adaptationFixture();
   const source = warm.graph.foods[0];
@@ -389,6 +433,7 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
       mapVariation: 0.9,
       outboundPolarity: -2,
       exploreSignalBias: 3,
+      foodTrailModel: "edge",
     },
     hill: 2,
     foods: [7],
@@ -396,6 +441,7 @@ Deno.test("algorithm and map configurations round-trip independently", () => {
   const algorithm = algorithmPreset(simulation);
   const map = mapPreset(simulation);
   assertEquals(algorithm.outboundPolarity, -2);
+  assertEquals(algorithm.foodTrailModel, "edge");
   assert(!Object.hasOwn(algorithm, "mapVariation"));
   assertEquals(map.params.mapVariation, 0.9);
   assert(!Object.hasOwn(map.params, "outboundPolarity"));
@@ -419,6 +465,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "headingInfluence",
     "distanceInfluence",
     "choiceFloor",
+    "foodTrailModel",
     "fastInfluence",
     "outboundPolarity",
     "returnFastInfluence",

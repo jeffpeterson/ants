@@ -481,13 +481,17 @@ const drawSlowPheromones = (simulation, points) =>
   );
 
 const drawFastPheromones = (simulation, points) =>
-  simulation.graph.edges.forEach((edge) =>
+  simulation.graph.edges.forEach((edge) => {
+    const edgeModel = simulation.params.foodTrailModel === "edge";
+    const edgeLevel = simulation.pheromones.fastEdges[edge.id];
+    const fromLevel = edgeModel ? edgeLevel : simulation.pheromones.fast[edge.a];
+    const toLevel = edgeModel ? edgeLevel : simulation.pheromones.fast[edge.b];
     drawPheromoneEdge(
       points[edge.a],
       points[edge.b],
-      simulation.pheromones.fast[edge.a] + simulation.pheromones.fast[edge.b],
-      simulation.pheromones.fast[edge.a],
-      simulation.pheromones.fast[edge.b],
+      fromLevel + toLevel,
+      fromLevel,
+      toLevel,
       {
         color: "#087f8c",
         faint: "rgba(8, 127, 140, 0.08)",
@@ -496,8 +500,8 @@ const drawFastPheromones = (simulation, points) =>
         width: (intensity) => 1.2 + intensity * 4.6,
         dashed: true,
       },
-    )
-  );
+    );
+  });
 
 const drawHill = (point) => {
   context.save();
@@ -811,6 +815,7 @@ const syncControls = (simulation) => {
     input.value = value;
     byId(`${name}-value`).textContent = format(value);
   });
+  byId("foodTrailModel").value = simulation.params.foodTrailModel;
   byId("seed").value = simulation.graphSeed;
 };
 
@@ -833,6 +838,13 @@ sliderConfigs.forEach(([name, parse, format]) => {
   input.addEventListener("input", update);
   output.textContent = format(input.value);
 });
+
+byId("foodTrailModel").addEventListener("change", (event) =>
+  dispatch({
+    type: "parameter",
+    name: "foodTrailModel",
+    value: event.currentTarget.value,
+  }));
 
 const readPresetLibrary = (key) => {
   try {

@@ -14,7 +14,16 @@ const boundedInteger = (value, fallback, minimum, maximum) =>
   Math.min(maximum, Math.max(minimum, Math.round(Number(value ?? fallback))));
 
 const options = parseArgs(Deno.args);
+const model = options.model === "edge" ? "edge" : "node";
+const fixed = model === "edge"
+  ? {
+    foodTrailModel: "edge",
+    outboundPolarity: 0,
+    returnFastPolarity: 0,
+  }
+  : { foodTrailModel: "node" };
 const settings = {
+  model,
   method: options.method === "random" ? "random" : "lhs",
   searchSeed: Number(options["search-seed"] ?? 20_260_727) >>> 0,
   samples: boundedInteger(options.samples, 48, 1, 1_000),
@@ -53,6 +62,7 @@ const designed = designCandidates({
   samples: settings.samples,
   seed: settings.searchSeed,
   method: settings.method,
+  fixed,
 });
 const initial = evaluateBatch(
   designed.candidates,
@@ -68,6 +78,7 @@ const refined = Array.from({ length: settings.rounds }).reduce(
       round,
       perElite: settings.perElite,
       seed: state.seed,
+      fixed,
     });
     const evaluated = evaluateBatch(
       generated.candidates,

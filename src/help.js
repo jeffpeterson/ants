@@ -36,6 +36,8 @@ export const CONTROL_HELP = Object.freeze({
     "Favor shorter adjacent edges. Zero ignores edge length; higher values strengthen the preference.",
   choiceFloor:
     "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
+  foodTrailModel:
+    "Store food pheromone as scalar node levels with derived slopes, or on undirected edges with no stored direction. Switching preserves both live fields.",
   fastInfluence:
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:

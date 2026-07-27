@@ -95,6 +95,21 @@ Deno.test("candidate anchors and refinements are deterministic and bounded", () 
       point.every((value) => value >= 0 && value <= 1)
     ),
   );
+
+  const edgeDesign = designCandidates({
+    samples: 2,
+    seed: 7,
+    fixed: {
+      foodTrailModel: "edge",
+      outboundPolarity: 0,
+      returnFastPolarity: 0,
+    },
+  });
+  assert(edgeDesign.candidates.every(({ params }) =>
+    params.foodTrailModel === "edge" &&
+    params.outboundPolarity === 0 &&
+    params.returnFastPolarity === 0
+  ));
 });
 
 Deno.test("adaptation destinations are deterministic, distinct, and local-agnostic", () => {

@@ -35,18 +35,21 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
 button,
 input[type="checkbox"],
-input[type="range"] {
+input[type="range"],
+select {
   cursor: pointer;
 }
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 canvas:focus-visible,
 summary:focus-visible {
   outline: 3px solid rgb(49 92 245 / 35%);
@@ -480,6 +483,21 @@ h2 {
 .slider-row output {
   color: var(--muted);
   font: 650 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.slider-row select {
+  width: 100%;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface-strong);
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.signal-food select {
+  border-color: color-mix(in srgb, var(--fast) 60%, var(--line-dark));
 }
 
 .persistent-name,

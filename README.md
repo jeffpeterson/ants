@@ -34,24 +34,27 @@ connected from 8 through 1,200 nodes. Ants move at one physical speed: crossing 
 takes `edge.length / speed`, so shorter routes permit more laps and more reinforcement
 per minute.
 
-The colony stores two scalar levels at every node:
+The colony always stores a scalar persistent level at every node:
 
 - The persistent field is extended by searching ants carrying a hill-sourced chemical
   level that weakens with distance. It fades slowly.
-- The food field is deposited only by an ant that has picked up food. It begins at food
-  and is renewed as the carrier walks toward the hill. It fades quickly.
 
-There are no directional pheromone records. At node `u`, the option `u → v` reads the
-level at the opposite endpoint `v`. The renderer interpolates endpoint levels along the
-edge and can draw their current slope:
+Food pheromone is deposited only by an ant that has picked up food. A playground lever
+stores it either as scalar node levels or on undirected edges; both live fields are
+maintained so the model can change without resetting the colony. There are no
+directional pheromone records.
+
+In node mode, option `u → v` reads the food level at the opposite endpoint `v`. The
+renderer interpolates endpoint levels along the edge and can draw their current slope:
 
 ```text
 visibleSlope(field, u, v) = level[field, v] - level[field, u]
 ```
 
 That slope is a visualization, not an instruction. A carrier deposits later near the
-hill, so freshness can make food concentration rise hillward. Polarity affects a choice
-only when its corresponding playground control is nonzero.
+hill, so freshness can make food concentration rise hillward. In edge mode, option
+`u → v` instead reads the single scalar on undirected edge `{u,v}` and food polarity has
+no effect because the edge stores no direction.
 
 Pheromone marks stay visually static between simulation updates so the ants are the only
 moving marks on the graph.
@@ -63,8 +66,12 @@ relativeSlope(field, u, v) =
   (level[field, v] - level[field, u])
   / (level[field, v] + level[field, u])
 
+cue(channel, u, v) =
+  level[channel, v]             for node fields
+  level[channel, {u,v}]         for an undirected edge field
+
 weight(u, v) =
-  (base + Σ attraction[channel] · level[channel, v])
+  (base + Σ attraction[channel] · cue(channel, u, v))
   · exp(Σ polarity[channel] · relativeSlope(channel, u, v))
   · headingBias(u, v)
   · edgeLength(u, v)^(-shortEdgeBias)
@@ -72,6 +79,10 @@ weight(u, v) =
 
 P(u → v) = weight(u, v) / Σ weight(u, option)
 ```
+
+When another branch has signal, the unmarked-branch floor controls how much of the small
+base term an unmarked option retains. Zero reproduces hard trail following; positive
+values permit rare local error correction without putting an ant into scouting mode.
 
 Outbound and homebound ants have independent attraction and polarity settings. Setting
 an attraction or polarity control to zero removes that cue. At food, an ant reverses its
@@ -86,8 +97,9 @@ set.
 
 ## Model invariants
 
-- Pheromone is one scalar per node per channel, never a stored direction. Renderer
-  arrows are derived from endpoint levels.
+- Persistent pheromone is one scalar per node. Food pheromone is either one scalar per
+  node or per undirected edge, never a stored direction. Renderer arrows exist only for
+  endpoint-derived node slopes.
 - Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
   do.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.

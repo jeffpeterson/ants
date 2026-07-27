@@ -30,6 +30,11 @@ export const OPTIMIZED_KEYS = Object.freeze([
   "fastHalfLife",
 ]);
 
+export const EVALUATED_KEYS = Object.freeze([
+  ...OPTIMIZED_KEYS,
+  "foodTrailModel",
+]);
+
 export const PARAMETER_SPECS = Object.freeze([
   { key: "exploreRate", min: 0, max: 0.3, scale: "power", power: 2 },
   { key: "stopExploreChance", min: 0.01, max: 0.95, scale: "log" },
@@ -53,6 +58,7 @@ export const HYPOTHESIS_PARAMS = Object.freeze({
   stopExploreChance: 0.16,
   exploreSignalBias: -1.2,
   choiceFloor: 1,
+  foodTrailModel: "node",
   reversePenalty: 0.15,
   headingInfluence: 1.2,
   distanceInfluence: 1.3,
@@ -86,7 +92,7 @@ const select = (values, keys) =>
   Object.fromEntries(keys.map((key) => [key, values[key]]));
 
 export const algorithmParameters = (values = {}) =>
-  select(sanitizeParams({ ...DEFAULTS, ...values }), OPTIMIZED_KEYS);
+  select(sanitizeParams({ ...DEFAULTS, ...values }), EVALUATED_KEYS);
 
 export const canonicalParameters = (values) =>
   JSON.stringify(algorithmParameters(values));
@@ -109,14 +115,17 @@ const encodeValue = (value, spec) => {
   return spec.scale === "power" ? Math.pow(amount, 1 / spec.power) : amount;
 };
 
-export const decodePoint = (point) =>
+export const decodePoint = (point, fixed = {}) =>
   algorithmParameters(
-    Object.fromEntries(
-      PARAMETER_SPECS.map((spec, index) => [
-        spec.key,
-        decodeValue(point[index] ?? 0.5, spec),
-      ]),
-    ),
+    {
+      ...Object.fromEntries(
+        PARAMETER_SPECS.map((spec, index) => [
+          spec.key,
+          decodeValue(point[index] ?? 0.5, spec),
+        ]),
+      ),
+      ...fixed,
+    },
   );
 
 export const encodeParameters = (values) => {
@@ -211,14 +220,14 @@ const namedCandidate = (id, params) => ({
   point: encodeParameters(params),
 });
 
-export const anchorCandidates = () => {
-  const defaults = algorithmParameters(DEFAULTS);
+export const anchorCandidates = (fixed = {}) => {
+  const defaults = algorithmParameters({ ...DEFAULTS, ...fixed });
   const zeroAnchors = PARAMETER_SPECS
     .filter(({ min, max }) => min <= 0 && max >= 0)
     .map(({ key }) => namedCandidate(`zero-${key}`, { ...defaults, [key]: 0 }));
   return uniqueCandidates([
     namedCandidate("defaults", defaults),
-    namedCandidate("hypothesis", HYPOTHESIS_PARAMS),
+    namedCandidate("hypothesis", { ...HYPOTHESIS_PARAMS, ...fixed }),
     ...zeroAnchors,
   ]);
 };
@@ -227,6 +236,7 @@ export const designCandidates = ({
   samples = 64,
   seed = 1,
   method = "lhs",
+  fixed = {},
 } = {}) => {
   const design = method === "random"
     ? randomDesign(samples, PARAMETER_SPECS.length, seed)
@@ -234,10 +244,10 @@ export const designCandidates = ({
   const sampled = design.points.map((point, index) => ({
     id: `${method}-${String(index + 1).padStart(3, "0")}`,
     point,
-    params: decodePoint(point),
+    params: decodePoint(point, fixed),
   }));
   return {
-    candidates: uniqueCandidates([...anchorCandidates(), ...sampled]),
+    candidates: uniqueCandidates([...anchorCandidates(fixed), ...sampled]),
     seed: design.seed,
   };
 };
@@ -259,6 +269,7 @@ export const refineCandidates = (
     perElite = 4,
     seed = 1,
     sigma = [0.15, 0.07][round] ?? 0.04,
+    fixed = {},
   } = {},
 ) => {
   const generated = elites.reduce(
@@ -281,7 +292,7 @@ export const refineCandidates = (
               {
                 id: `refine-${round + 1}-${eliteIndex + 1}-${childIndex + 1}`,
                 point: point.values,
-                params: decodePoint(point.values),
+                params: decodePoint(point.values, fixed),
               },
             ],
             rngSeed: point.seed,
@@ -760,4 +771,5 @@ export const assertOptimizationSchema = () =>
   OPTIMIZED_KEYS.every((key) =>
     PARAMETER_SPECS.some((spec) => spec.key === key) &&
     ALGORITHM_KEYS.includes(key)
-  );
+  ) &&
+  EVALUATED_KEYS.every((key) => ALGORITHM_KEYS.includes(key));
