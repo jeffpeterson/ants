@@ -15,7 +15,19 @@ const parseArgs = (args) =>
     return { ...options, [key]: value };
   }, {});
 
+const parseOverrides = (value = "") =>
+  Object.fromEntries(
+    value.split(",")
+      .filter(Boolean)
+      .map((assignment) => {
+        const [key, raw = ""] = assignment.split("=", 2);
+        const numeric = Number(raw);
+        return [key, Number.isFinite(numeric) && raw !== "" ? numeric : raw];
+      }),
+  );
+
 const options = parseArgs(Deno.args);
+const overrides = parseOverrides(options.set);
 const suites = {
   screening: SCREENING_SCENARIOS,
   training: TRAINING_SCENARIOS,
@@ -52,7 +64,7 @@ const candidates = imported !== null
   ];
 const dt = Number(options.dt ?? 0.25);
 const results = candidates.map(({ id, params }) => {
-  const evaluation = evaluateCandidate(params, scenarios, { dt });
+  const evaluation = evaluateCandidate({ ...params, ...overrides }, scenarios, { dt });
   return {
     id,
     params: evaluation.params,

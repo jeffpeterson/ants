@@ -746,6 +746,12 @@ const sliderConfigs = [
     (value) => value * 10,
   ],
   [
+    "choiceFloor",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
     "fastInfluence",
     (value) => Number(value) / 10,
     (value) => `${(Number(value) / 10).toFixed(1)}×`,

@@ -34,6 +34,8 @@ export const CONTROL_HELP = Object.freeze({
     "Favor branches that continue the ant’s incoming heading using only local junction geometry.",
   distanceInfluence:
     "Favor shorter adjacent edges. Zero ignores edge length; higher values strengthen the preference.",
+  choiceFloor:
+    "Relative base weight retained for an unmarked branch when another option has signal. Zero forbids the deviation; higher values permit error correction.",
   fastInfluence:
     "Outbound attraction to food-signal strength at each branch’s opposite endpoint.",
   outboundPolarity:

@@ -155,6 +155,26 @@ Deno.test("a branch reads the signal at its opposite node", () => {
   );
 });
 
+Deno.test("the unmarked branch floor permits local error correction", () => {
+  const pheromones = {
+    slow: { 0: 0, 1: 0, 2: 0 },
+    fast: { 0: 0, 1: 1, 2: 0 },
+  };
+  const choices = (choiceFloor) =>
+    choiceProbabilities(
+      0,
+      [1, 2],
+      pheromones,
+      parameters({ choiceFloor, fastInfluence: 2 }),
+    );
+  assertEquals(choices(0).find(({ node }) => node === 2)?.probability, 0);
+  assert(choices(1).find(({ node }) => node === 2)?.probability > 0);
+  assert(
+    choices(1).find(({ node }) => node === 1)?.probability >
+      choices(1).find(({ node }) => node === 2)?.probability,
+  );
+});
+
 Deno.test("polarity can climb, descend, or be ignored", () => {
   const pheromones = {
     slow: { 0: 0, 1: 0, 2: 0 },
@@ -398,6 +418,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "reversePenalty",
     "headingInfluence",
     "distanceInfluence",
+    "choiceFloor",
     "fastInfluence",
     "outboundPolarity",
     "returnFastInfluence",

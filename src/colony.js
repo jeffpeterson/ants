@@ -15,6 +15,7 @@ export const DEFAULTS = Object.freeze({
   returnFastPolarity: 0,
   returnSlowPolarity: 4,
   exploreSignalBias: 0,
+  choiceFloor: 0,
   headingInfluence: 1.6,
   fastDeposit: 0.72,
   distanceInfluence: 1,
@@ -62,6 +63,11 @@ export const sanitizeParams = (values = {}) => ({
     -4,
     4,
     finiteOr(DEFAULTS.exploreSignalBias, values.exploreSignalBias),
+  ),
+  choiceFloor: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.choiceFloor, values.choiceFloor),
   ),
   headingInfluence: clamp(
     0,
@@ -550,7 +556,8 @@ const signalProbabilities = (
   );
   if (signaled.length === 0) return [];
   return normalizeChoices(
-    signaled.map((neighbor) => {
+    neighbors.map((neighbor) => {
+      const marked = active.some(({ field }) => field[neighbor] > EPSILON);
       const visibility = Math.pow(
         1 / edgeLength(neighbor),
         params.distanceInfluence,
@@ -569,7 +576,7 @@ const signalProbabilities = (
       return {
         node: neighbor,
         weight: attraction * Math.exp(polarity) * visibility *
-          edgeBias(neighbor) * reversal,
+          edgeBias(neighbor) * reversal * (marked ? 1 : params.choiceFloor),
       };
     }),
   );

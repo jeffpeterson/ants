@@ -172,3 +172,12 @@ Useful controls include `--samples`, `--rounds`, `--elite`, `--per-elite`,
 the versioned report goes to stdout as JSON. Graph seeds and colony random seeds are
 separate, every candidate sees the same scenarios, and `antCount` and `speed` remain
 fixed evaluation resources.
+
+For a controlled ablation, `evaluate` accepts comma-separated overrides:
+
+```sh
+deno task evaluate -- \
+  --input=.runs/colony-search.json \
+  --set=choiceFloor=1 \
+  --suite=validation
+```
