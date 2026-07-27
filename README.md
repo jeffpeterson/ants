@@ -122,6 +122,10 @@ The [research library](docs/README.md) archives downloadable papers and annotate
 additional work on pheromone decay, error correction, directional cues, shortest paths,
 and artificial ant systems.
 
+The [evaluation and optimization protocol](docs/optimization.md) defines effectiveness,
+locks parameter hypotheses before experimentation, and separates training maps from
+held-out validation.
+
 Moving, adding, or removing food preserves ants, elapsed time, and both pheromone
 fields. Returning ants finish trips from retired sources while old signals evaporate.
 Algorithm presets and map presets are stored separately in browser storage. The active
