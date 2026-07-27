@@ -791,6 +791,10 @@ bindButton("cancel-food-move", () => ({ type: "cancelFoodMove" }));
 
 const conciseNumber = (value) => Number(Number(value).toFixed(2)).toString();
 
+const simulationRateLabel = (value) => `${conciseNumber(value)}×`;
+const simulationRateFromSlider = (value) => 2 ** Number(value);
+const simulationRateToSlider = (value) => Math.log2(value);
+
 const polarityLabel = (value) => {
   const scaled = Number(value) / 10;
   if (scaled === 0) return "ignore";
@@ -979,6 +983,8 @@ const syncControls = (current) => {
   setText("engine-revision", shortRevision(engine));
   setText("engine-note", engineNote(engine));
   byId("engineId").title = engineTooltip(engine);
+  byId("simulationRate").value = simulationRateToSlider(current.simulationRate);
+  setText("simulationRate-value", simulationRateLabel(current.simulationRate));
   byId("seed").value = simulation.graphSeed;
 };
 
@@ -1022,11 +1028,14 @@ byId("engineId").addEventListener("change", (event) =>
     type: "engine",
     engineId: event.currentTarget.value,
   }));
-byId("simulationRate").addEventListener("change", (event) =>
+byId("simulationRate").addEventListener("input", (event) => {
+  const value = simulationRateFromSlider(event.currentTarget.value);
+  setText("simulationRate-value", simulationRateLabel(value));
   dispatch({
     type: "simulationRate",
-    value: event.currentTarget.value,
-  }));
+    value,
+  });
+});
 
 const readPresetLibrary = (key) => {
   try {

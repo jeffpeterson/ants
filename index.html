@@ -144,15 +144,9 @@
               Live successor to B1 (bce2a56) · local-memory · home-potential
             </p>
             <label class="slider-row" for="simulationRate">
-              <span>Simulation rate</span>
-              <select id="simulationRate">
-                <option value="0.25">0.25×</option>
-                <option value="0.5">0.5×</option>
-                <option value="1" selected>1×</option>
-                <option value="2">2×</option>
-                <option value="4">4×</option>
-                <option value="8">8×</option>
-              </select>
+              <span>Simulation rate <output id="simulationRate-value">1×</output></span>
+              <input id="simulationRate" type="range" min="-2" max="3" step="0.1"
+                value="0">
             </label>
             <label class="slider-row" for="antCount">
               <span>Ants <output id="antCount-value">64</output></span>
