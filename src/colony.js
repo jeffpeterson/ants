@@ -1016,19 +1016,30 @@ const advanceAnt = (
   };
 };
 
-const addDeposits = (pheromones, deposits) =>
-  deposits.reduce(
-    (fields, deposit) => ({
-      ...fields,
-      [deposit.channel]: {
-        ...fields[deposit.channel],
-        [deposit.target]: deposit.combine === "max"
-          ? Math.max(fields[deposit.channel][deposit.target], deposit.amount)
-          : fields[deposit.channel][deposit.target] + deposit.amount,
-      },
+const addDeposits = (pheromones, deposits) => {
+  const byChannel = Object.groupBy(deposits, ({ channel }) => channel);
+  return Object.fromEntries(
+    Object.entries(pheromones).map(([channel, field]) => {
+      const byTarget = Object.groupBy(
+        byChannel[channel] ?? [],
+        ({ target }) => target,
+      );
+      const updates = Object.fromEntries(
+        Object.entries(byTarget).map(([target, targetDeposits]) => [
+          target,
+          targetDeposits.reduce(
+            (value, deposit) =>
+              deposit.combine === "max"
+                ? Math.max(value, deposit.amount)
+                : value + deposit.amount,
+            field[target],
+          ),
+        ]),
+      );
+      return [channel, { ...field, ...updates }];
     }),
-    pheromones,
   );
+};
 
 const updateStats = (stats, events) =>
   events.reduce((next, event) => {
