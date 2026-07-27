@@ -39,8 +39,8 @@
             <h2 id="stage-heading">Graph field</h2>
           </div>
           <div class="legend" aria-label="Visualization legend">
-            <span><i class="legend-slow"></i>Persistent level</span>
-            <span><i class="legend-fast"></i>Food level</span>
+            <span><i class="legend-slow"></i><strong class="persistent-name">Persistent</strong> level</span>
+            <span><i class="legend-fast"></i><strong class="food-name">Food</strong> level</span>
             <span><i class="legend-explore"></i>Scouting</span>
           </div>
         </div>
@@ -177,8 +177,8 @@
               <span>Stop scouting <output id="stopExploreChance-value">12% / s</output></span>
               <input id="stopExploreChance" type="range" min="1" max="95" value="12">
             </label>
-            <label class="slider-row" for="exploreSignalBias">
-              <span>Persistent-signal bias <output id="exploreSignalBias-value">ignore</output></span>
+            <label class="slider-row signal-persistent" for="exploreSignalBias">
+              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">ignore</output></span>
               <input id="exploreSignalBias" type="range" min="-40" max="40" value="0">
             </label>
             <label class="slider-row" for="reversePenalty">
@@ -209,12 +209,12 @@
             <h2>Outbound decisions</h2>
           </div>
           <div class="slider-list">
-            <label class="slider-row" for="fastInfluence">
-              <span>Food-signal pull <output id="fastInfluence-value">3.2×</output></span>
+            <label class="slider-row signal-food" for="fastInfluence">
+              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="fastInfluence-value">3.2×</output></span>
               <input id="fastInfluence" type="range" min="0" max="100" value="32">
             </label>
-            <label class="slider-row" for="outboundPolarity">
-              <span>Food polarity <output id="outboundPolarity-value">ignore</output></span>
+            <label class="slider-row signal-food" for="outboundPolarity">
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="outboundPolarity-value">ignore</output></span>
               <input id="outboundPolarity" type="range" min="-40" max="40" value="0">
             </label>
           </div>
@@ -225,20 +225,20 @@
             <h2>Homebound decisions</h2>
           </div>
           <div class="slider-list">
-            <label class="slider-row" for="returnFastInfluence">
-              <span>Food-signal pull <output id="returnFastInfluence-value">1.0×</output></span>
+            <label class="slider-row signal-food" for="returnFastInfluence">
+              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="returnFastInfluence-value">1.0×</output></span>
               <input id="returnFastInfluence" type="range" min="0" max="100" value="10">
             </label>
-            <label class="slider-row" for="returnSlowInfluence">
-              <span>Persistent-signal pull <output id="returnSlowInfluence-value">8.0×</output></span>
+            <label class="slider-row signal-persistent" for="returnSlowInfluence">
+              <span><span><strong class="persistent-name">Persistent</strong>-signal pull</span> <output id="returnSlowInfluence-value">8.0×</output></span>
               <input id="returnSlowInfluence" type="range" min="0" max="100" value="80">
             </label>
-            <label class="slider-row" for="returnFastPolarity">
-              <span>Food polarity <output id="returnFastPolarity-value">ignore</output></span>
+            <label class="slider-row signal-food" for="returnFastPolarity">
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="returnFastPolarity-value">ignore</output></span>
               <input id="returnFastPolarity" type="range" min="-40" max="40" value="0">
             </label>
-            <label class="slider-row" for="returnSlowPolarity">
-              <span>Persistent polarity <output id="returnSlowPolarity-value">4.0× climb</output></span>
+            <label class="slider-row signal-persistent" for="returnSlowPolarity">
+              <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="returnSlowPolarity-value">4.0× climb</output></span>
               <input id="returnSlowPolarity" type="range" min="-40" max="40" value="40">
             </label>
           </div>
@@ -249,12 +249,12 @@
             <h2>Pheromones</h2>
           </div>
           <div class="slider-list">
-            <label class="slider-row" for="slowHalfLife">
-              <span>Persistent half-life <output id="slowHalfLife-value">42 s</output></span>
+            <label class="slider-row signal-persistent" for="slowHalfLife">
+              <span><span><strong class="persistent-name">Persistent</strong> half-life</span> <output id="slowHalfLife-value">42 s</output></span>
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
             </label>
-            <label class="slider-row" for="fastHalfLife">
-              <span>Food half-life <output id="fastHalfLife-value">9 s</output></span>
+            <label class="slider-row signal-food" for="fastHalfLife">
+              <span><span><strong class="food-name">Food</strong> half-life</span> <output id="fastHalfLife-value">9 s</output></span>
               <input id="fastHalfLife" type="range" min="2" max="40" value="9">
             </label>
           </div>
