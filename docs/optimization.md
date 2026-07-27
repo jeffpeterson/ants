@@ -693,6 +693,22 @@ three-run validation seed floor remained below the deployed control (`44.26` ver
 exposes the `1%/s` candidate as a reproducible preset while bounded food propagation and
 finite-food tests continue.
 
+### Bounded-signal decision calibration
+
+The first combined finalist uses completed scouting, a `1%/s` scout-return hazard, a
+`1%` unmarked-branch floor, bounded half-distance `0.3`, and full reinforcement. It
+eliminates repeated failures and improves adaptation and seed stability, but the old
+additive-field decision calibration loses static throughput and route efficiency when
+food levels become bounded by `1`.
+
+Hold that mechanism fixed and test food-signal pull `4.56`, `7`, and `10` crossed with
+outbound polarity `0.78`, `2`, and `4`. The prediction is that stronger polarity, rather
+than raw pull alone, restores selection of the foodward endpoint because bounded
+potential now provides a trustworthy local gradient. Screening and stress choose
+finalists; validation, fresh confirmation, and browser cadence retain the existing
+failure, seed-floor, throughput, efficiency, utilization, participation, coherence, and
+homing gates.
+
 ### Evaluator v6: colony health and repeated runs
 
 The v6 evaluator adds mechanism health without changing the five outcome dimensions or
