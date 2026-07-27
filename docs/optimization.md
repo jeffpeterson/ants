@@ -564,6 +564,46 @@ confirmation (`68.77 → 71.98`), and boundary stress (`58.80 → 59.18`). A six
 cadence check scored `75.02`; the faster `50%` alternative remains available as the
 **Rapid home mapping** preset.
 
+## Productive-colony hypotheses
+
+The next iteration targets colony utilization and changing food rather than home-field
+correctness. These predictions are recorded before changing the mechanism or tuning its
+parameters:
+
+1. **Corrective scouts need a complete local lifecycle.** A scout that deliberately
+   leaves usable food signal can currently remain in exploration forever if it never
+   crosses an unwalked edge. Making that scout locally eligible to return, while keeping
+   initial discovery scouts ineligible until they cross a frontier, should reduce idle
+   scouting on fully covered graphs without shortening the first discovery wave.
+2. **Outcome-only scoring hides wasted ants.** Time-averaged ant states, the share of
+   ants completing a cycle, random-versus-signaled carrier movement, dominant-route
+   stretch, and signal focus should expose configurations that deliver with a productive
+   minority while most ants wander. Multiple colony seeds per graph and per-map
+   promotion floors should prevent one favorable random trajectory or a high mean from
+   hiding a weak map.
+3. **A small follower floor should release stale routes smoothly.** With a zero floor,
+   any positive food mark excludes every unmarked option until the mark is deleted.
+   After fixing scout lifecycle and measuring utilization, a nonzero base probability
+   should improve moved- and added-food adaptation. The best floor is predicted to be
+   small enough that mature-route throughput and dominant-route stretch remain
+   effectively unchanged.
+4. **A diminishing carrier deposit can create a foodward scalar gradient.** A carrier
+   can start with a scalar pheromone budget at food and reduce it as it travels home.
+   This requires no route, visited set, directional edge record, or graph knowledge:
+   every deposit still depends only on the ant's current budget and local movement.
+   Depositing more near food should make positive outbound polarity meaningful while
+   shorter paths retain their higher lap rate.
+5. **Changing-food evaluation must match the playground.** Promotion must cover moving,
+   adding, simultaneous, finite, exhausted, and newly spawned food without resetting
+   ants or fields. The predicted robust policy keeps a minority exploration reserve
+   after recruitment and shifts traffic to a new source before an old high-concentration
+   trail fully disappears.
+
+The implementation order is causal: repair scout lifecycle, add the missing
+measurements, retune follower release, evaluate diminishing deposits, then introduce
+finite and spawning food. Every stage must retain the local home-potential invariant and
+pass fresh browser-cadence and boundary scenarios before changing the default.
+
 ## Run the evaluator
 
 Compare the defaults and preregistered point prediction on the six screening maps:
