@@ -18,7 +18,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
   builtIn(
     "balanced-node",
     "Balanced node trails",
-    "Best robust result across held-out, browser-cadence, and stress evaluations.",
+    "Working scalar-trail default with uncharted-biased scouting and hill-only homing.",
   ),
   builtIn(
     "adaptive-edge",
@@ -51,6 +51,7 @@ export const BUILT_IN_ALGORITHM_PRESETS = Object.freeze([
       exploreRate: 0.02,
       stopExploreChance: 0.12,
       exploreSignalBias: 0,
+      unchartedPreference: 0,
       choiceFloor: 0,
       reversePenalty: 0.18,
       headingInfluence: 1.6,

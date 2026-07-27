@@ -10,12 +10,13 @@ import {
 } from "./colony.js";
 import { ALGORITHM_KEYS } from "./config.js";
 
-export const EVALUATION_VERSION = 2;
+export const EVALUATION_VERSION = 3;
 
 export const OPTIMIZED_KEYS = Object.freeze([
   "exploreRate",
   "stopExploreChance",
   "exploreSignalBias",
+  "unchartedPreference",
   "choiceFloor",
   "reversePenalty",
   "headingInfluence",
@@ -39,6 +40,7 @@ export const PARAMETER_SPECS = Object.freeze([
   { key: "exploreRate", min: 0, max: 0.3, scale: "power", power: 2 },
   { key: "stopExploreChance", min: 0.01, max: 0.95, scale: "log" },
   { key: "exploreSignalBias", min: -4, max: 4, scale: "linear" },
+  { key: "unchartedPreference", min: 0, max: 1, scale: "linear" },
   { key: "choiceFloor", min: 0, max: 1, scale: "power", power: 2 },
   { key: "reversePenalty", min: 0.01, max: 1, scale: "log" },
   { key: "headingInfluence", min: 0, max: 4, scale: "power", power: 2 },
@@ -57,6 +59,7 @@ export const HYPOTHESIS_PARAMS = Object.freeze({
   exploreRate: 0.03,
   stopExploreChance: 0.16,
   exploreSignalBias: -1.2,
+  unchartedPreference: 1,
   choiceFloor: 1,
   foodTrailModel: "node",
   reversePenalty: 0.15,

@@ -8,6 +8,7 @@ import {
   explorationStopProbability,
   foodProbabilitiesForNode,
   generateGraph,
+  homewardProbabilities,
   isConnected,
   moveFood,
   nextRandom,
@@ -224,7 +225,42 @@ Deno.test("polarity can climb, descend, or be ignored", () => {
   assertEquals(probabilities(0), []);
 });
 
-Deno.test("scouting can avoid, ignore, or seek persistent signal", () => {
+Deno.test("scouts prefer uncharted endpoints before charted branches", () => {
+  const pheromones = {
+    slow: { 0: 0, 1: 0, 2: 0, 3: 4, 99: 1_000 },
+    fast: { 0: 0, 1: 0, 2: 0, 3: 0 },
+  };
+  const choices = choiceProbabilities(
+    0,
+    [1, 2, 3],
+    pheromones,
+    parameters({
+      exploreSignalBias: 4,
+      unchartedPreference: 1,
+      reversePenalty: 1,
+    }),
+    true,
+  );
+
+  assertEquals(choices.map(({ node }) => node), [1, 2, 3]);
+  assertEquals(choices.map(({ probability }) => probability), [0.5, 0.5, 0]);
+  assertEquals(
+    choiceProbabilities(
+      0,
+      [1, 3],
+      { ...pheromones, slow: { ...pheromones.slow, 1: undefined } },
+      parameters({
+        exploreSignalBias: 4,
+        unchartedPreference: 1,
+        reversePenalty: 1,
+      }),
+      true,
+    ).map(({ probability }) => probability),
+    [1, 0],
+  );
+});
+
+Deno.test("charted scout fallback can avoid, ignore, or seek persistent signal", () => {
   const pheromones = {
     slow: { 0: 0, 1: 0.1, 2: 1 },
     fast: { 0: 0, 1: 0, 2: 0 },
@@ -234,7 +270,11 @@ Deno.test("scouting can avoid, ignore, or seek persistent signal", () => {
       0,
       [1, 2],
       pheromones,
-      parameters({ exploreSignalBias: bias, reversePenalty: 0.1 }),
+      parameters({
+        exploreSignalBias: bias,
+        unchartedPreference: 1,
+        reversePenalty: 0.1,
+      }),
       true,
       previous,
     );
@@ -242,6 +282,31 @@ Deno.test("scouting can avoid, ignore, or seek persistent signal", () => {
   assert(choices(4)[1].probability > choices(4)[0].probability);
   assert(Math.abs(choices(0)[0].probability - 0.5) < 1e-9);
   assert(choices(0, 1)[1].probability > choices(0, 1)[0].probability);
+});
+
+Deno.test("default carriers ignore food signal and climb the hill field", () => {
+  const pheromones = {
+    slow: { 0: 0.2, 1: 1, 2: 0.1 },
+    fast: { 0: 0.1, 1: 0, 2: 100 },
+    fastEdges: {},
+  };
+  const params = parameters({
+    returnFastInfluence: 0,
+    returnFastPolarity: 0,
+    returnSlowInfluence: 3.09,
+    returnSlowPolarity: 4,
+    distanceInfluence: 0,
+    reversePenalty: 1,
+  });
+  const choices = homewardProbabilities(
+    0,
+    [1, 2],
+    pheromones,
+    params,
+  );
+
+  assert(choices[0].probability > 0.99);
+  assert(choices[1].probability < 0.01);
 });
 
 Deno.test("the scouting exit control is a frame-rate-independent probability", () => {
@@ -305,15 +370,20 @@ Deno.test("simulation exposes tagged pickup and delivery measurements", () => {
     params: { speed: 0.65, antCount: 16 },
   });
   const events = [];
+  let firstDiscovery = null;
   for (
     let step = 0;
-    step < 2_000 && !events.some(({ type }) => type === "delivery");
+    step < 2_000 &&
+    !events.some(({ type, antId }) =>
+      type === "delivery" && antId === firstDiscovery?.antId
+    );
     step += 1
   ) {
     state = stepSimulation(state, 0.25);
     events.push(...state.lastEvents);
+    firstDiscovery ??= events.find(({ type }) => type === "discovery") ?? null;
   }
-  const discovery = events.find(({ type }) => type === "discovery");
+  const discovery = firstDiscovery;
   const delivery = events.find(({ type, antId }) =>
     type === "delivery" && antId === discovery?.antId
   );
@@ -462,6 +532,7 @@ Deno.test("the playground exposes every requested decision and graph lever", asy
     "exploreRate",
     "stopExploreChance",
     "exploreSignalBias",
+    "unchartedPreference",
     "reversePenalty",
     "headingInfluence",
     "distanceInfluence",

@@ -78,6 +78,7 @@ Deno.test("static controls exactly reproduce optimized defaults", async () => {
     exploreRate: 100,
     stopExploreChance: 100,
     exploreSignalBias: 10,
+    unchartedPreference: 100,
     choiceFloor: 100,
     reversePenalty: 100,
     speed: 100,

@@ -194,7 +194,7 @@ Two final local refinements were rejected:
   cadence it scored `30.16` versus `36.20` for zero and stranded on 3 rather than 1 of
   24 maps. Its stress score was also lower (`39.80` versus `41.43`).
 
-The promoted balanced-node settings are therefore:
+The first promoted balanced-node settings were therefore:
 
 | Lever                      | Default |
 | -------------------------- | ------: |
@@ -237,6 +237,59 @@ These verdicts distinguish causal ablations from parameter values merely selecte
 together. The validation maps participated in finalist ranking, so future iterations
 should add fresh graph seeds and repeated colony seeds before making smaller claims
 about improvements over the promoted default.
+
+## Uncharted scouting and pheromone-only homing
+
+A follow-up visual audit compared the first promoted model with commit `1347975`. That
+historical carrier did not merely follow better pheromone: it stored a loop-erased
+personal route, considered only earlier breadcrumbs while returning, and always fell
+back to its previous breadcrumb. Its persistent signal was also stored on directed
+homeward arcs. That combination guaranteed monotone return but violated the later
+pheromone-only, no-route-memory invariant.
+
+Evaluation version 3 instead makes two local changes:
+
+1. Scouts reduce a charted option's weight when an adjacent zero-coverage endpoint
+   exists. The new uncharted-priority lever controls that reduction. With all adjacent
+   endpoints charted, the default scout samples randomly apart from the existing U-turn
+   penalty.
+2. Carriers ignore the food field by default and climb only the persistent hill field.
+   This removes a conflicting cue without adding a route, visited set, stored direction,
+   coordinate, or graph-wide query.
+
+The carrier correction was isolated first. On six screening maps, disabling its food cue
+raised homing from `0.906` to `0.985` and cycle efficiency from `0.468` to `0.535`. On
+24 validation maps it raised score from `27.37` to `38.99`, raised homing from `0.922`
+to `0.958`, and eliminated both stranded and no-adaptation maps. Raising persistent pull
+from `3.09` to `10` was less robust, so that lever remains unchanged.
+
+An uncharted-priority sweep then compared `25%`, `50%`, `75%`, and `100%`. The `75%`
+candidate had the strongest combined validation and boundary performance:
+
+| Version-3 result      | 75% priority | 100% priority |
+| --------------------- | -----------: | ------------: |
+| Validation score      |        42.97 |         38.99 |
+| Validation throughput |        0.252 |         0.243 |
+| Validation homing     |        0.966 |         0.958 |
+| Browser score         |        34.38 |         38.41 |
+| Browser throughput    |        0.245 |         0.238 |
+| Browser homing        |        0.965 |         0.968 |
+| Boundary score        |        40.59 |         35.30 |
+| Boundary throughput   |        0.256 |         0.247 |
+
+The browser pass for `75%` had one no-adaptation map but no stranded maps; its
+validation and boundary passes had neither failure. It is retained as the working
+default because it improves useful traffic across two of the three suites and treats
+“prefer” as a strong local weighting rather than an absolute exclusion.
+
+The current overrides relative to the first promoted preset are:
+
+| Lever                     | First promotion | Current |
+| ------------------------- | --------------: | ------: |
+| Scout persistent fallback |   `1.10×` avoid |  ignore |
+| Uncharted priority        |             n/a |     75% |
+| Homebound food pull       |          `1.10` |       0 |
+| Homebound food polarity   | `1.40×` descend |  ignore |
 
 ## Run the evaluator
 

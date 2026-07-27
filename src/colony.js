@@ -10,11 +10,12 @@ export const DEFAULTS = Object.freeze({
   fastHalfLife: 14.4,
   fastInfluence: 4.56,
   outboundPolarity: 0.78,
-  returnFastInfluence: 1.1,
+  returnFastInfluence: 0,
   returnSlowInfluence: 3.09,
-  returnFastPolarity: -1.4,
+  returnFastPolarity: 0,
   returnSlowPolarity: 4,
-  exploreSignalBias: -1.1,
+  exploreSignalBias: 0,
+  unchartedPreference: 0.75,
   choiceFloor: 0,
   foodTrailModel: "node",
   headingInfluence: 1.58,
@@ -64,6 +65,11 @@ export const sanitizeParams = (values = {}) => ({
     -4,
     4,
     finiteOr(DEFAULTS.exploreSignalBias, values.exploreSignalBias),
+  ),
+  unchartedPreference: clamp(
+    0,
+    1,
+    finiteOr(DEFAULTS.unchartedPreference, values.unchartedPreference),
   ),
   choiceFloor: clamp(
     0,
@@ -641,16 +647,20 @@ export const choiceProbabilities = (
     );
   }
 
-  const maximum = Math.max(
-    EPSILON,
-    ...neighbors.map((neighbor) => pheromones.slow[neighbor]),
-  );
+  const slowAt = (neighbor) => pheromones.slow[neighbor] ?? 0;
+  const maximum = Math.max(EPSILON, ...neighbors.map(slowAt));
+  const hasUncharted = neighbors.some((neighbor) => slowAt(neighbor) <= EPSILON);
   return normalizeChoices(
     neighbors.map((neighbor) => ({
       node: neighbor,
       weight: Math.exp(
-        params.exploreSignalBias * pheromones.slow[neighbor] / maximum,
-      ) * (neighbor === discouragedNode ? params.reversePenalty : 1),
+        params.exploreSignalBias * slowAt(neighbor) / maximum,
+      ) * (neighbor === discouragedNode ? params.reversePenalty : 1) *
+        (
+          hasUncharted && slowAt(neighbor) > EPSILON
+            ? 1 - params.unchartedPreference
+            : 1
+        ),
     })),
   );
 };
@@ -726,6 +736,38 @@ const foodwardProbabilities = (ant, graph, pheromones, params) =>
     ),
   );
 
+export const homewardProbabilities = (
+  node,
+  neighbors,
+  pheromones,
+  params,
+  previous = null,
+  edgeLength = () => 1,
+  edgeBias = () => 1,
+) =>
+  signalProbabilities(
+    node,
+    neighbors,
+    [
+      foodSignal(
+        pheromones,
+        params,
+        params.returnFastInfluence,
+        params.returnFastPolarity,
+      ),
+      {
+        field: pheromones.slow,
+        edgeField: false,
+        influence: params.returnSlowInfluence,
+        polarity: params.returnSlowPolarity,
+      },
+    ],
+    params,
+    previous,
+    edgeLength,
+    edgeBias,
+  );
+
 const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   const foodward = foodwardProbabilities(ant, graph, pheromones, params);
   const [exploreDraw, choiceSeed] = nextRandom(seed);
@@ -771,23 +813,10 @@ const startReturnEdge = (ant, graph, pheromones, params, seed) => {
       seed,
     ];
   }
-  const signaled = signalProbabilities(
+  const signaled = homewardProbabilities(
     ant.node,
     graph.adjacency[ant.node],
-    [
-      foodSignal(
-        pheromones,
-        params,
-        params.returnFastInfluence,
-        params.returnFastPolarity,
-      ),
-      {
-        field: pheromones.slow,
-        edgeField: false,
-        influence: params.returnSlowInfluence,
-        polarity: params.returnSlowPolarity,
-      },
-    ],
+    pheromones,
     params,
     ant.previous,
     edgeLengthFrom(graph, ant.node),

@@ -86,14 +86,21 @@ values permit rare local error correction without putting an ant into scouting m
 
 Outbound and homebound ants have independent attraction and polarity settings. Setting
 an attraction or polarity control to zero removes that cue. At food, an ant reverses its
-incoming edge once, then resumes local choices; it does not retrace a stored path.
+incoming edge once, then resumes local choices; it does not retrace a stored path. The
+default carrier ignores the food field and climbs only the persistent hill field. This
+avoids reinforcing a mistaken food-marked branch during return.
 
 Every ant starts in scouting mode. Later, an independent enter-scouting chance can
-switch a follower back into it. A scout makes a random adjacent choice, modified only by
-the configurable persistent-signal bias and U-turn weight. On every simulation update it
-has an adjustable per-second chance to stop scouting. This memoryless exit rule is
-stable across animation frame rates and stores no step count, timer, route, or visited
-set.
+switch a follower back into it. When any adjacent endpoint has zero persistent signal,
+the default scout chooses randomly among only those uncharted options. Uncharted
+priority can soften that exclusion. Once all adjacent endpoints are charted, the scout
+chooses randomly by default; an optional signed bias can instead avoid or seek the
+persistent field. The U-turn weight remains the only default modifier within either
+tier.
+
+On every simulation update a scout has an adjustable per-second chance to stop scouting.
+This memoryless exit rule is stable across animation frame rates and stores no step
+count, timer, route, or visited set.
 
 ## Model invariants
 
@@ -103,6 +110,8 @@ set.
 - Only an ant carrying food deposits food pheromone. Outbound followers and scouts never
   do.
 - Every ant scouts at the start. Scouting is a temporary stochastic mode, not a caste.
+- “Uncharted” means a zero-coverage opposite endpoint among the current node's adjacent
+  options; it is not a personal visited set or a graph-wide query.
 - A decision reads adjacent endpoint levels, the incoming edge, local branch geometry,
   edge length, mode, and seeded randomness. It never reads a route, visited set,
   shortest-path result, or graph-wide statistic.

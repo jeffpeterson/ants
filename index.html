@@ -61,7 +61,7 @@
 
         <div class="stage-footer">
           <p id="stage-status">
-            The whole colony is scouting random branches.
+            The whole colony is scouting locally uncharted branches.
           </p>
           <dl>
             <div>
@@ -180,9 +180,14 @@
                 value="8.3">
             </label>
             <label class="slider-row signal-persistent" for="exploreSignalBias">
-              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">1.1× avoid</output></span>
+              <span><span><strong class="persistent-name">Persistent</strong>-signal bias</span> <output id="exploreSignalBias-value">ignore</output></span>
               <input id="exploreSignalBias" type="range" min="-40" max="40" step="0.1"
-                value="-11">
+                value="0">
+            </label>
+            <label class="slider-row signal-persistent" for="unchartedPreference">
+              <span>Uncharted priority <output id="unchartedPreference-value">75%</output></span>
+              <input id="unchartedPreference" type="range" min="0" max="100"
+                step="0.1" value="75">
             </label>
             <label class="slider-row" for="reversePenalty">
               <span>U-turn weight <output id="reversePenalty-value">4.5%</output></span>
@@ -239,9 +244,9 @@
           </div>
           <div class="slider-list">
             <label class="slider-row signal-food" for="returnFastInfluence">
-              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="returnFastInfluence-value">1.1×</output></span>
+              <span><span><strong class="food-name">Food</strong>-signal pull</span> <output id="returnFastInfluence-value">0×</output></span>
               <input id="returnFastInfluence" type="range" min="0" max="100" step="0.1"
-                value="11">
+                value="0">
             </label>
             <label class="slider-row signal-persistent" for="returnSlowInfluence">
               <span><span><strong class="persistent-name">Persistent</strong>-signal pull</span> <output id="returnSlowInfluence-value">3.09×</output></span>
@@ -249,9 +254,9 @@
                 value="30.9">
             </label>
             <label class="slider-row signal-food" for="returnFastPolarity">
-              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="returnFastPolarity-value">1.4× descend</output></span>
+              <span><span><strong class="food-name">Food</strong> polarity</span> <output id="returnFastPolarity-value">ignore</output></span>
               <input id="returnFastPolarity" type="range" min="-40" max="40" step="0.1"
-                value="-14">
+                value="0">
             </label>
             <label class="slider-row signal-persistent" for="returnSlowPolarity">
               <span><span><strong class="persistent-name">Persistent</strong> polarity</span> <output id="returnSlowPolarity-value">4.0× climb</output></span>

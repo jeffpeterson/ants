@@ -28,7 +28,9 @@ export const CONTROL_HELP = Object.freeze({
   stopExploreChance:
     "Per-second chance that a scouting ant returns to normal trail following; independent of frame rate.",
   exploreSignalBias:
-    "Bias scouts by persistent signal at the opposite endpoint: negative avoids it, zero ignores it, positive seeks it.",
+    "After every adjacent branch is charted, bias scouts by persistent signal at the opposite endpoint: negative avoids it, zero chooses randomly, positive seeks it.",
+  unchartedPreference:
+    "Reduce the weight of charted branches when a zero-coverage endpoint is locally available. At 100%, scouts choose only among uncharted options.",
   reversePenalty:
     "Weight for immediately reversing onto the previous node. Lower values discourage one-edge backtracking.",
   headingInfluence:

@@ -232,7 +232,7 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "The whole colony is scouting random branches.";
+    return "The whole colony is scouting locally uncharted branches.";
   }
   if (metrics.deliveries === 0) {
     return "Food found. Carriers are extending the food field.";
@@ -734,6 +734,12 @@ const sliderConfigs = [
     (value) => Number(value) / 10,
     signalBiasLabel,
     (value) => value * 10,
+  ],
+  [
+    "unchartedPreference",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
   ],
   [
     "reversePenalty",

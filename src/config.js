@@ -3,6 +3,7 @@ export const ALGORITHM_KEYS = Object.freeze([
   "exploreRate",
   "stopExploreChance",
   "exploreSignalBias",
+  "unchartedPreference",
   "choiceFloor",
   "foodTrailModel",
   "reversePenalty",
