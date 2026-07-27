@@ -42,8 +42,19 @@ const run = (state, steps, dt = 0.25) =>
     state,
   );
 
+const testSimulation = (options = {}) =>
+  createSimulation({
+    ...options,
+    params: {
+      nodeCount: 24,
+      density: 0.42,
+      mapVariation: 0.72,
+      ...options.params,
+    },
+  });
+
 const parameters = (patch = {}) => ({
-  ...createSimulation({ seed: 1 }).params,
+  ...testSimulation({ seed: 1 }).params,
   distanceInfluence: 0,
   headingInfluence: 0,
   reversePenalty: 1,
@@ -138,7 +149,7 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
     Math.abs(trailGradient({ 0: 0.2, 1: 0.7 }, { a: 0, b: 1 }) - 0.5) <
       1e-12,
   );
-  const initial = createSimulation({ seed: 1 });
+  const initial = testSimulation({ seed: 1 });
   assertEquals(
     Object.keys(initial.pheromones.fastEdges).toSorted(),
     initial.graph.edges.map(({ id }) => id).toSorted(),
@@ -150,7 +161,7 @@ Deno.test("pheromones are scalar node fields and food fades faster", () => {
 });
 
 Deno.test("home remains the sole anchored persistent source", () => {
-  const initial = createSimulation({ seed: 19 });
+  const initial = testSimulation({ seed: 19 });
   const faded = {
     ...initial,
     ants: [],
@@ -170,7 +181,7 @@ Deno.test("home remains the sole anchored persistent source", () => {
 });
 
 Deno.test("the first outbound trail already increases toward home", () => {
-  let state = createSimulation({
+  let state = testSimulation({
     seed: 19,
     params: { antCount: 8, speed: 0.65 },
   });
@@ -200,7 +211,7 @@ Deno.test("the first outbound trail already increases toward home", () => {
 });
 
 Deno.test("stale carried values cannot inject persistent signal", () => {
-  const initial = createSimulation({ seed: 23, params: { antCount: 8 } });
+  const initial = testSimulation({ seed: 23, params: { antCount: 8 } });
   const edge = initial.graph.edges.find(({ a, b }) =>
     ![a, b].includes(initial.graph.hill) &&
     ![a, b].some((node) => initial.graph.foods.includes(node))
@@ -232,7 +243,7 @@ Deno.test("stale carried values cannot inject persistent signal", () => {
 });
 
 Deno.test("every persistent mark retains a higher home-potential neighbor", () => {
-  let state = createSimulation({
+  let state = testSimulation({
     seed: 93,
     params: { antCount: 48, speed: 0.65 },
   });
@@ -479,7 +490,7 @@ Deno.test("a scout treats its incoming edge as walked immediately", () => {
 });
 
 Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 29,
     params: {
       antCount: 8,
@@ -538,7 +549,7 @@ Deno.test("only a frontier-armed scout can leave an exhausted frontier", () => {
 });
 
 Deno.test("covered downhill travel never makes an armed scout retreat", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 29,
     params: {
       antCount: 8,
@@ -585,7 +596,7 @@ Deno.test("covered downhill travel never makes an armed scout retreat", () => {
 });
 
 Deno.test("choosing an unwalked edge arms the scout frontier", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 37,
     params: {
       antCount: 8,
@@ -629,7 +640,7 @@ Deno.test("choosing an unwalked edge arms the scout frontier", () => {
 
 Deno.test("scouts can rejoin a locally usable food trail", () => {
   const resultFor = (trailJoinChance, signaled = true) => {
-    const initial = createSimulation({
+    const initial = testSimulation({
       seed: 43,
       params: {
         antCount: 8,
@@ -685,7 +696,7 @@ Deno.test("scouts can rejoin a locally usable food trail", () => {
 });
 
 Deno.test("escape ends and resets only at home", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 31,
     params: { antCount: 8, speed: 0.65 },
   });
@@ -778,7 +789,7 @@ Deno.test("the scouting exit control is a frame-rate-independent probability", (
 });
 
 Deno.test("the whole colony leaves without route or visited-set memory", () => {
-  const initial = createSimulation({ seed: 41 });
+  const initial = testSimulation({ seed: 41 });
   const started = run(initial, initial.ants.length + 1, 1 / 60);
   assert(started.ants.every((ant) =>
     ant.launchDelay < 1e-9 &&
@@ -790,7 +801,7 @@ Deno.test("the whole colony leaves without route or visited-set memory", () => {
 });
 
 Deno.test("launch staggering lets later ants see the first edge trail", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 41,
     params: {
       antCount: 64,
@@ -830,7 +841,7 @@ Deno.test("launch staggering lets later ants see the first edge trail", () => {
 });
 
 Deno.test("food signal is deposited only after pickup", () => {
-  let state = createSimulation({
+  let state = testSimulation({
     seed: 7,
     params: { speed: 0.65, antCount: 16 },
   });
@@ -848,7 +859,7 @@ Deno.test("food signal is deposited only after pickup", () => {
 
 Deno.test("carriers deposit food signal only while making homeward progress", () => {
   const crossing = (destinationLevel) => {
-    const initial = createSimulation({
+    const initial = testSimulation({
       seed: 37,
       params: { antCount: 8, speed: 0.65 },
     });
@@ -902,7 +913,7 @@ Deno.test("carriers deposit food signal only while making homeward progress", ()
 });
 
 Deno.test("food pickup reverses the incoming edge before local homing", () => {
-  let state = createSimulation({ seed: 8, params: { speed: 0.65 } });
+  let state = testSimulation({ seed: 8, params: { speed: 0.65 } });
   let turnaround = null;
   for (let step = 0; step < 2_000 && turnaround === null; step += 1) {
     state = stepSimulation(state, 0.25);
@@ -916,7 +927,7 @@ Deno.test("food pickup reverses the incoming edge before local homing", () => {
 });
 
 Deno.test("simulation exposes tagged pickup and delivery measurements", () => {
-  let state = createSimulation({
+  let state = testSimulation({
     seed: 8,
     params: { speed: 0.65, antCount: 16 },
   });
@@ -953,7 +964,7 @@ Deno.test("simulation exposes tagged pickup and delivery measurements", () => {
 
 Deno.test("clustered colonies form productive, predominantly short leading trails", () => {
   const results = Array.from({ length: 12 }, (_, seed) => {
-    const final = run(createSimulation({ seed: seed + 1 }), 720);
+    const final = run(testSimulation({ seed: seed + 1 }), 720);
     const dominant = dominantFoodRoute(final);
     assert(final.stats.deliveries > 0, `Seed ${seed + 1} made no delivery`);
     assert(dominant !== null, `Seed ${seed + 1} has no complete food trail`);
@@ -967,7 +978,7 @@ Deno.test("clustered colonies form productive, predominantly short leading trail
 });
 
 Deno.test("simulation transitions are immutable", () => {
-  const initial = createSimulation({
+  const initial = testSimulation({
     seed: 93,
     params: {
       nodeCount: 8,
@@ -986,7 +997,7 @@ Deno.test("simulation transitions are immutable", () => {
 
 const adaptationFixture = () =>
   run(
-    createSimulation({
+    testSimulation({
       seed: 93,
       params: {
         nodeCount: 8,
@@ -1049,7 +1060,7 @@ Deno.test("the colony adapts to moved food without resetting", () => {
 });
 
 Deno.test("algorithm and map configurations round-trip independently", () => {
-  const simulation = createSimulation({
+  const simulation = testSimulation({
     seed: 123,
     params: {
       mapVariation: 0.9,
@@ -1126,9 +1137,9 @@ Deno.test("every interactive control has help text", async () => {
 });
 
 Deno.test("saved map endpoints reproduce on the same graph recipe", () => {
-  const source = createSimulation({ seed: 77 });
+  const source = testSimulation({ seed: 77 });
   const recipe = mapPreset(source);
-  const copy = createSimulation({
+  const copy = testSimulation({
     seed: recipe.seed,
     params: recipe.params,
     hill: recipe.hill,

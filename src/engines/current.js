@@ -1,6 +1,6 @@
 export const DEFAULTS = Object.freeze({
-  nodeCount: 24,
-  density: 0.42,
+  nodeCount: 200,
+  density: 0.75,
   mapVariation: 0.72,
   antCount: 64,
   exploreRate: 0.007,
