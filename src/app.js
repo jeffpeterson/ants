@@ -719,11 +719,11 @@ const drawAnt = (view, points) => {
   context.arc(2.4, 0, 1.8, 0, Math.PI * 2);
   context.fill();
   if (view.returning) {
-    context.fillStyle = "#91bd2b";
+    context.fillStyle = "#83b719";
     context.strokeStyle = "#fffaf0";
-    context.lineWidth = 0.9;
+    context.lineWidth = 1.4;
     context.beginPath();
-    context.ellipse(5.7, -0.2, 2.6, 2, -0.25, 0, Math.PI * 2);
+    context.arc(6, 0, 3.4, 0, Math.PI * 2);
     context.fill();
     context.stroke();
   }
