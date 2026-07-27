@@ -1,24 +1,32 @@
 export const DEFAULTS = Object.freeze({
   nodeCount: 24,
   density: 0.42,
+  islandCount: 3,
+  islandSeparation: 0.65,
+  islandLinks: 2,
   antCount: 64,
-  exploreRate: 0.05,
+  exploreRate: 0.02,
+  stopExploreChance: 0.12,
   speed: 0.17,
   slowHalfLife: 42,
   fastHalfLife: 9,
-  slowInfluence: 0.5,
   fastInfluence: 3.2,
-  slowDeposit: 0.045,
+  outboundPolarity: 0,
+  returnFastInfluence: 1,
+  returnSlowInfluence: 8,
+  returnFastPolarity: 0,
+  returnSlowPolarity: 4,
+  exploreSignalBias: 0,
+  headingInfluence: 1.6,
   fastDeposit: 0.72,
-  slowExponent: 1.15,
   distanceInfluence: 1,
-  gradientAttenuation: 2,
   baseWeight: 0.06,
   reversePenalty: 0.18,
 });
 
 const UINT32_RANGE = 4_294_967_296;
 const EPSILON = 1e-9;
+const HOME_ATTENUATION = 2;
 
 export const clamp = (minimum, maximum, value) =>
   Math.min(maximum, Math.max(minimum, value));
@@ -33,30 +41,71 @@ export const sanitizeParams = (values = {}) => ({
     clamp(8, 1_200, finiteOr(DEFAULTS.nodeCount, values.nodeCount)),
   ),
   density: clamp(0.05, 0.9, finiteOr(DEFAULTS.density, values.density)),
+  islandCount: Math.round(
+    clamp(1, 12, finiteOr(DEFAULTS.islandCount, values.islandCount)),
+  ),
+  islandSeparation: clamp(
+    0,
+    0.9,
+    finiteOr(DEFAULTS.islandSeparation, values.islandSeparation),
+  ),
+  islandLinks: Math.round(
+    clamp(1, 6, finiteOr(DEFAULTS.islandLinks, values.islandLinks)),
+  ),
   antCount: Math.round(clamp(8, 120, finiteOr(DEFAULTS.antCount, values.antCount))),
   exploreRate: clamp(
     0,
     0.3,
     finiteOr(DEFAULTS.exploreRate, values.exploreRate),
   ),
+  stopExploreChance: clamp(
+    0.01,
+    0.95,
+    finiteOr(DEFAULTS.stopExploreChance, values.stopExploreChance),
+  ),
   speed: clamp(0.04, 0.65, finiteOr(DEFAULTS.speed, values.speed)),
   slowHalfLife: clamp(5, 120, finiteOr(DEFAULTS.slowHalfLife, values.slowHalfLife)),
   fastHalfLife: clamp(2, 40, finiteOr(DEFAULTS.fastHalfLife, values.fastHalfLife)),
-  slowInfluence: clamp(
+  exploreSignalBias: clamp(
+    -4,
+    4,
+    finiteOr(DEFAULTS.exploreSignalBias, values.exploreSignalBias),
+  ),
+  headingInfluence: clamp(
     0,
-    8,
-    finiteOr(DEFAULTS.slowInfluence, values.slowInfluence),
+    4,
+    finiteOr(DEFAULTS.headingInfluence, values.headingInfluence),
   ),
   fastInfluence: clamp(0, 10, finiteOr(DEFAULTS.fastInfluence, values.fastInfluence)),
+  outboundPolarity: clamp(
+    -4,
+    4,
+    finiteOr(DEFAULTS.outboundPolarity, values.outboundPolarity),
+  ),
+  returnFastInfluence: clamp(
+    0,
+    10,
+    finiteOr(DEFAULTS.returnFastInfluence, values.returnFastInfluence),
+  ),
+  returnSlowInfluence: clamp(
+    0,
+    10,
+    finiteOr(DEFAULTS.returnSlowInfluence, values.returnSlowInfluence),
+  ),
+  returnFastPolarity: clamp(
+    -4,
+    4,
+    finiteOr(DEFAULTS.returnFastPolarity, values.returnFastPolarity),
+  ),
+  returnSlowPolarity: clamp(
+    -4,
+    4,
+    finiteOr(DEFAULTS.returnSlowPolarity, values.returnSlowPolarity),
+  ),
   distanceInfluence: clamp(
     0,
     2,
     finiteOr(DEFAULTS.distanceInfluence, values.distanceInfluence),
-  ),
-  gradientAttenuation: clamp(
-    0.2,
-    6,
-    finiteOr(DEFAULTS.gradientAttenuation, values.gradientAttenuation),
   ),
   reversePenalty: clamp(
     0.01,
@@ -89,24 +138,77 @@ const gridShape = (count) => {
   return { columns, rows: Math.ceil(count / columns) };
 };
 
-const generateNodes = (count, seed) => {
-  const shape = gridShape(count);
-  const generated = Array.from({ length: count }).reduce(
-    ({ nodes, rngSeed }) => {
-      const id = nodes.length;
-      const column = id % shape.columns;
-      const row = Math.floor(id / shape.columns);
-      const [[jitterX, jitterY], nextSeed] = randomPair(rngSeed);
-      const node = {
-        id,
-        x: 0.055 + ((column + 0.14 + jitterX * 0.72) / shape.columns) * 0.89,
-        y: 0.07 + ((row + 0.14 + jitterY * 0.72) / shape.rows) * 0.86,
+const islandSizes = (count, islands) =>
+  Array.from(
+    { length: islands },
+    (_, island) => Math.floor(count / islands) + Number(island < count % islands),
+  );
+
+const describeIslands = (count, requested) => {
+  const total = Math.min(requested, Math.max(1, Math.floor(count / 2)));
+  const layout = gridShape(total);
+  return islandSizes(count, total).reduce(
+    ({ islands, start }, size, id) => {
+      const shape = gridShape(size);
+      return {
+        islands: [
+          ...islands,
+          {
+            id,
+            start,
+            size,
+            columns: shape.columns,
+            rows: shape.rows,
+            mapColumn: id % layout.columns,
+            mapRow: Math.floor(id / layout.columns),
+          },
+        ],
+        start: start + size,
       };
-      return { nodes: [...nodes, node], rngSeed: nextSeed };
+    },
+    { islands: [], start: 0 },
+  ).islands;
+};
+
+const generateNodes = (count, requestedIslands, separation, seed) => {
+  const islands = describeIslands(count, requestedIslands);
+  const layout = gridShape(islands.length);
+  const cellWidth = 0.88 / layout.columns;
+  const cellHeight = 0.84 / layout.rows;
+  const spread = 0.9 - separation * 0.72;
+  const generated = islands.reduce(
+    ({ nodes, rngSeed }, island) => {
+      const centerX = 0.06 + (island.mapColumn + 0.5) * cellWidth;
+      const centerY = 0.08 + (island.mapRow + 0.5) * cellHeight;
+      return Array.from({ length: island.size }).reduce(
+        (result, _, localIndex) => {
+          const [[jitterX, jitterY], nextSeed] = randomPair(result.rngSeed);
+          const column = localIndex % island.columns;
+          const row = Math.floor(localIndex / island.columns);
+          const localX = (column + 0.14 + jitterX * 0.72) /
+              island.columns -
+            0.5;
+          const localY = (row + 0.14 + jitterY * 0.72) / island.rows -
+            0.5;
+          return {
+            nodes: [
+              ...result.nodes,
+              {
+                id: island.start + localIndex,
+                island: island.id,
+                x: centerX + localX * cellWidth * spread,
+                y: centerY + localY * cellHeight * spread,
+              },
+            ],
+            rngSeed: nextSeed,
+          };
+        },
+        { nodes, rngSeed },
+      );
     },
     { nodes: [], rngSeed: seed >>> 0 },
   );
-  return { ...generated, ...shape };
+  return { ...generated, islands };
 };
 
 const makeEdge = (nodes, first, second) => ({
@@ -130,26 +232,76 @@ const GRID_OFFSETS = Object.freeze([
   [0, -1],
 ]);
 
-const edgesForOffsets = (nodes, columns, offsets) => {
-  const rows = Math.ceil(nodes.length / columns);
-  return nodes.flatMap((node) => {
-    const column = node.id % columns;
-    const row = Math.floor(node.id / columns);
-    return offsets.flatMap(([columnOffset, rowOffset]) => {
-      const otherColumn = column + columnOffset;
-      const otherRow = row + rowOffset;
-      const otherId = otherRow * columns + otherColumn;
-      const valid = otherColumn >= 0 && otherColumn < columns &&
-        otherRow >= 0 && otherRow < rows &&
-        otherId >= 0 && otherId < nodes.length;
-      return valid ? [makeEdge(nodes, node.id, otherId)] : [];
-    });
-  });
+const edgesForOffsets = (nodes, islands, offsets) =>
+  islands.flatMap((island) =>
+    Array.from({ length: island.size }).flatMap((_, localIndex) => {
+      const column = localIndex % island.columns;
+      const row = Math.floor(localIndex / island.columns);
+      return offsets.flatMap(([columnOffset, rowOffset]) => {
+        const otherColumn = column + columnOffset;
+        const otherRow = row + rowOffset;
+        const otherIndex = otherRow * island.columns + otherColumn;
+        const valid = otherColumn >= 0 &&
+          otherColumn < island.columns &&
+          otherRow >= 0 &&
+          otherRow < island.rows &&
+          otherIndex >= 0 &&
+          otherIndex < island.size;
+        return valid
+          ? [
+            makeEdge(
+              nodes,
+              island.start + localIndex,
+              island.start + otherIndex,
+            ),
+          ]
+          : [];
+      });
+    })
+  );
+
+const islandCenter = (nodes, island) => {
+  const members = nodes.slice(island.start, island.start + island.size);
+  return members.reduce(
+    (center, node) => ({
+      x: center.x + node.x / members.length,
+      y: center.y + node.y / members.length,
+    }),
+    { x: 0, y: 0 },
+  );
 };
 
-const localEdges = (nodes, columns) => edgesForOffsets(nodes, columns, LOCAL_OFFSETS);
+const bridgePairs = (nodes, first, second, count) =>
+  nodes
+    .slice(first.start, first.start + first.size)
+    .flatMap((from) =>
+      nodes
+        .slice(second.start, second.start + second.size)
+        .map((to) => makeEdge(nodes, from.id, to.id))
+    )
+    .reduce(
+      (closest, edge) =>
+        [...closest, edge]
+          .toSorted((left, right) => left.length - right.length)
+          .slice(0, count),
+      [],
+    );
 
-const gridBackbone = (nodes, columns) => edgesForOffsets(nodes, columns, GRID_OFFSETS);
+const bridgeEdges = (nodes, islands, count) => {
+  const centers = islands.map((island) => islandCenter(nodes, island));
+  return islands.slice(1).flatMap((island, offset) => {
+    const index = offset + 1;
+    const parent = islands
+      .slice(0, index)
+      .reduce((nearest, candidate) =>
+        distance(centers[index], centers[candidate.id]) <
+            distance(centers[index], centers[nearest.id])
+          ? candidate
+          : nearest
+      );
+    return bridgePairs(nodes, island, parent, count);
+  });
+};
 
 const scoreCandidates = (candidates, seed) =>
   candidates.reduce(
@@ -190,11 +342,29 @@ const farthestPair = (nodes) => {
 
 export const generateGraph = (seed, values = {}) => {
   const params = sanitizeParams(values);
-  const generated = generateNodes(params.nodeCount, seed);
-  const tree = gridBackbone(generated.nodes, generated.columns);
-  const treeIds = new Set(tree.map((edge) => edge.id));
-  const optional = localEdges(generated.nodes, generated.columns)
-    .filter((edge) => !treeIds.has(edge.id));
+  const generated = generateNodes(
+    params.nodeCount,
+    params.islandCount,
+    params.islandSeparation,
+    seed,
+  );
+  const backbone = edgesForOffsets(
+    generated.nodes,
+    generated.islands,
+    GRID_OFFSETS,
+  );
+  const bridges = bridgeEdges(
+    generated.nodes,
+    generated.islands,
+    params.islandLinks,
+  );
+  const required = [...backbone, ...bridges];
+  const requiredIds = new Set(required.map((edge) => edge.id));
+  const optional = edgesForOffsets(
+    generated.nodes,
+    generated.islands,
+    LOCAL_OFFSETS,
+  ).filter((edge) => !requiredIds.has(edge.id));
   const scored = scoreCandidates(optional, generated.rngSeed);
   const extraCount = Math.min(
     optional.length,
@@ -204,7 +374,7 @@ export const generateGraph = (seed, values = {}) => {
     .toSorted((first, second) => first.score - second.score)
     .slice(0, extraCount)
     .map(({ edge }) => edge);
-  const edges = [...tree, ...extras].toSorted((first, second) =>
+  const edges = [...required, ...extras].toSorted((first, second) =>
     first.id.localeCompare(second.id)
   );
   const endpoints = farthestPair(generated.nodes);
@@ -217,6 +387,7 @@ export const generateGraph = (seed, values = {}) => {
       edgeById: Object.fromEntries(edges.map((edge) => [edge.id, edge])),
       hill: endpoints.first,
       foods: [endpoints.second],
+      islandCount: generated.islands.length,
     },
     scored.rngSeed,
   ];
@@ -295,14 +466,19 @@ export const shortestRouteToFood = (graph, start = graph.hill) =>
     .map((food) => shortestRoute(graph, start, food))
     .reduce((shortest, route) => route.distance < shortest.distance ? route : shortest);
 
-const emptyField = (graph) => ({
-  nodes: Object.fromEntries(graph.nodes.map(({ id }) => [id, 0])),
-  edges: Object.fromEntries(graph.edges.map(({ id }) => [id, 0])),
-});
+const emptyField = (graph) => Object.fromEntries(graph.nodes.map(({ id }) => [id, 0]));
 
 const emptyPheromones = (graph) => ({
-  slow: emptyField(graph),
+  slow: { ...emptyField(graph), [graph.hill]: 1 },
   fast: emptyField(graph),
+});
+
+const graphParameters = (params) => ({
+  nodeCount: params.nodeCount,
+  density: params.density,
+  islandCount: params.islandCount,
+  islandSeparation: params.islandSeparation,
+  islandLinks: params.islandLinks,
 });
 
 const makeAnt = (id, hill) => ({
@@ -313,23 +489,42 @@ const makeAnt = (id, hill) => ({
   previous: null,
   tripDistance: 0,
   homeLevel: 1,
-  foodLevel: 0,
-  returnSignal: null,
-  searchState: { kind: "discover" },
+  turnAround: null,
+  searchState: { kind: "explore" },
   exploreChoices: 0,
   followChoices: 0,
   trips: 0,
 });
 
 const generateAnts = (count, hill, seed, startId = 0) => ({
-  ants: Array.from({ length: count }, (_, index) => makeAnt(startId + index, hill)),
+  ants: Array.from(
+    { length: count },
+    (_, index) => makeAnt(startId + index, hill),
+  ),
   rngSeed: seed,
 });
 
-export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
+export const createSimulation = ({
+  seed = 1837,
+  params: values = {},
+  hill,
+  foods,
+} = {}) => {
   const params = sanitizeParams(values);
   const graphSeed = Number(seed) >>> 0;
-  const [graph, graphRngSeed] = generateGraph(graphSeed, params);
+  const [generatedGraph, graphRngSeed] = generateGraph(graphSeed, params);
+  const savedHill = Object.hasOwn(generatedGraph.adjacency, hill) ? hill : null;
+  const selectedHill = savedHill ?? generatedGraph.hill;
+  const savedFoods = Array.isArray(foods)
+    ? [...new Set(foods)].filter((food) =>
+      Object.hasOwn(generatedGraph.adjacency, food) && food !== selectedHill
+    )
+    : [];
+  const graph = {
+    ...generatedGraph,
+    hill: selectedHill,
+    foods: savedFoods.length > 0 ? savedFoods : generatedGraph.foods,
+  };
   const generatedAnts = generateAnts(
     params.antCount,
     graph.hill,
@@ -339,6 +534,7 @@ export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
 
   return {
     graphSeed,
+    graphParams: graphParameters(params),
     rngSeed: generatedAnts.rngSeed,
     elapsed: 0,
     params,
@@ -358,20 +554,14 @@ export const createSimulation = ({ seed = 1837, params: values = {} } = {}) => {
   };
 };
 
-const decayValues = (values, factor) =>
-  Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [
-      key,
-      value * factor < 1e-6 ? 0 : value * factor,
-    ]),
-  );
-
 const decayField = (field, halfLife, dt) => {
   const factor = Math.pow(0.5, dt / halfLife);
-  return {
-    nodes: decayValues(field.nodes, factor),
-    edges: decayValues(field.edges, factor),
-  };
+  return Object.fromEntries(
+    Object.entries(field).map(([node, value]) => {
+      const decayed = value * factor;
+      return [node, decayed < 1e-6 ? 0 : decayed];
+    }),
+  );
 };
 
 export const decayPheromones = (pheromones, params, dt) => ({
@@ -379,11 +569,8 @@ export const decayPheromones = (pheromones, params, dt) => ({
   fast: decayField(pheromones.fast, params.fastHalfLife, dt),
 });
 
-export const fieldGradient = (field, node, neighbor) =>
-  (field.nodes[neighbor] ?? 0) - (field.nodes[node] ?? 0);
-
-const trailOnEdge = (field, node, neighbor) =>
-  field.edges[edgeKey(node, neighbor)] ?? 0;
+export const trailGradient = (field, edge) =>
+  (field[edge.b] ?? 0) - (field[edge.a] ?? 0);
 
 const normalizeChoices = (choices) => {
   const total = choices.reduce((sum, { weight }) => sum + weight, 0);
@@ -393,28 +580,53 @@ const normalizeChoices = (choices) => {
   }));
 };
 
-const gradientChoices = (
+const relativeGradient = (field, node, neighbor) => {
+  const here = field[node] ?? 0;
+  const there = field[neighbor] ?? 0;
+  return (there - here) / Math.max(EPSILON, here + there);
+};
+
+const signalProbabilities = (
   node,
   neighbors,
-  field,
-  direction,
-  influence,
+  signals,
   params,
+  previous,
   edgeLength,
-) =>
-  neighbors.flatMap((neighbor) => {
-    const gradient = direction * fieldGradient(field, node, neighbor);
-    const trail = trailOnEdge(field, node, neighbor);
-    if (gradient <= EPSILON || trail <= EPSILON) return [];
-    const visibility = Math.pow(
-      1 / edgeLength(neighbor),
-      params.distanceInfluence,
-    );
-    return [{
-      node: neighbor,
-      weight: (params.baseWeight + influence * gradient) * visibility,
-    }];
-  });
+  edgeBias = () => 1,
+) => {
+  const active = signals.filter(({ influence, polarity }) =>
+    influence > EPSILON || Math.abs(polarity) > EPSILON
+  );
+  const signaled = neighbors.filter((neighbor) =>
+    active.some(({ field }) => field[neighbor] > EPSILON)
+  );
+  if (signaled.length === 0) return [];
+  return normalizeChoices(
+    signaled.map((neighbor) => {
+      const visibility = Math.pow(
+        1 / edgeLength(neighbor),
+        params.distanceInfluence,
+      );
+      const attraction = active.reduce(
+        (sum, { field, influence }) => sum + influence * field[neighbor],
+        params.baseWeight,
+      );
+      const polarity = active.reduce(
+        (sum, signal) =>
+          sum + signal.polarity *
+            relativeGradient(signal.field, node, neighbor),
+        0,
+      );
+      const reversal = neighbor === previous ? params.reversePenalty : 1;
+      return {
+        node: neighbor,
+        weight: attraction * Math.exp(polarity) * visibility *
+          edgeBias(neighbor) * reversal,
+      };
+    }),
+  );
+};
 
 export const choiceProbabilities = (
   node,
@@ -424,31 +636,34 @@ export const choiceProbabilities = (
   exploring = false,
   discouragedNode = null,
   edgeLength = () => 1,
+  edgeBias = () => 1,
 ) => {
-  const choices = exploring
-    ? neighbors.map((neighbor) => {
-      const trail = trailOnEdge(pheromones.slow, node, neighbor);
-      return {
-        node: neighbor,
-        weight: params.baseWeight /
-          (1 + params.slowInfluence * Math.pow(trail, params.slowExponent)),
-      };
-    })
-    : gradientChoices(
+  if (!exploring) {
+    return signalProbabilities(
       node,
       neighbors,
-      pheromones.fast,
-      1,
-      params.fastInfluence,
+      [{
+        field: pheromones.fast,
+        influence: params.fastInfluence,
+        polarity: params.outboundPolarity,
+      }],
       params,
+      discouragedNode,
       edgeLength,
+      edgeBias,
     );
-  if (choices.length === 0) return [];
+  }
+
+  const maximum = Math.max(
+    EPSILON,
+    ...neighbors.map((neighbor) => pheromones.slow[neighbor]),
+  );
   return normalizeChoices(
-    choices.map((choice) => ({
-      ...choice,
-      weight: choice.weight *
-        (choice.node === discouragedNode ? params.reversePenalty : 1),
+    neighbors.map((neighbor) => ({
+      node: neighbor,
+      weight: Math.exp(
+        params.exploreSignalBias * pheromones.slow[neighbor] / maximum,
+      ) * (neighbor === discouragedNode ? params.reversePenalty : 1),
     })),
   );
 };
@@ -470,32 +685,31 @@ const chooseWithSeed = (probabilities, seed) => {
   return [choose(probabilities, random), nextSeed];
 };
 
-export const familiarityProbabilities = (
-  node,
-  neighbors,
-  pheromones,
-  params,
-) => {
-  if (neighbors.length === 0) return [];
-  return normalizeChoices(
-    neighbors.map((neighbor) => {
-      const trail = trailOnEdge(pheromones.slow, node, neighbor);
-      return {
-        node: neighbor,
-        weight: params.baseWeight +
-          params.slowInfluence * Math.pow(trail, params.slowExponent),
-      };
-    }),
-  );
-};
-
 const edgeLengthFrom = (graph, node) => (neighbor) =>
   graph.edgeById[edgeKey(node, neighbor)].length;
 
-const attenuate = (level, length, params) =>
-  level * Math.exp(-params.gradientAttenuation * length);
+const headingBiasFrom = (graph, node, previous, influence) => {
+  if (previous === null) return () => 1;
+  const start = graph.nodes[previous];
+  const center = graph.nodes[node];
+  const incomingX = center.x - start.x;
+  const incomingY = center.y - start.y;
+  const incomingLength = Math.hypot(incomingX, incomingY);
+  return (neighbor) => {
+    const end = graph.nodes[neighbor];
+    const outgoingX = end.x - center.x;
+    const outgoingY = end.y - center.y;
+    const outgoingLength = Math.hypot(outgoingX, outgoingY);
+    const cosine = (
+      incomingX * outgoingX + incomingY * outgoingY
+    ) / (incomingLength * outgoingLength);
+    return Math.exp(influence * cosine);
+  };
+};
 
-const movementEdge = (ant, graph, to, params, extra = {}) => {
+const attenuateHome = (level, length) => level * Math.exp(-HOME_ATTENUATION * length);
+
+const movementEdge = (ant, graph, to, extra = {}) => {
   const length = graph.edgeById[edgeKey(ant.node, to)].length;
   return {
     from: ant.node,
@@ -503,47 +717,9 @@ const movementEdge = (ant, graph, to, params, extra = {}) => {
     progress: 0,
     length,
     homeFrom: ant.homeLevel,
-    homeTo: attenuate(ant.homeLevel, length, params),
-    foodFrom: ant.foodLevel,
-    foodTo: attenuate(ant.foodLevel, length, params),
+    homeTo: attenuateHome(ant.homeLevel, length),
     ...extra,
   };
-};
-
-const discoveryProbabilities = (
-  ant,
-  graph,
-  pheromones,
-  params,
-  novelty,
-) => {
-  const neighbors = graph.adjacency[ant.node];
-  if (novelty) {
-    return choiceProbabilities(
-      ant.node,
-      neighbors,
-      pheromones,
-      params,
-      true,
-      ant.previous,
-    );
-  }
-  const outward = neighbors.filter((neighbor) =>
-    fieldGradient(pheromones.slow, ant.node, neighbor) < -EPSILON
-  );
-  const candidates = outward.length > 0 ? outward : neighbors;
-  return normalizeChoices(
-    familiarityProbabilities(
-      ant.node,
-      candidates,
-      pheromones,
-      params,
-    ).map(({ node, probability }) => ({
-      node,
-      weight: probability *
-        (node === ant.previous ? params.reversePenalty : 1),
-    })),
-  );
 };
 
 const foodwardProbabilities = (ant, graph, pheromones, params) =>
@@ -555,95 +731,99 @@ const foodwardProbabilities = (ant, graph, pheromones, params) =>
     false,
     ant.previous,
     edgeLengthFrom(graph, ant.node),
+    headingBiasFrom(
+      graph,
+      ant.node,
+      ant.previous,
+      params.headingInfluence,
+    ),
   );
 
 const startSearchEdge = (ant, graph, pheromones, params, seed) => {
   const foodward = foodwardProbabilities(ant, graph, pheromones, params);
-  if (ant.searchState.kind === "probe" && foodward.length === 0) {
-    return [
-      {
-        ...ant,
-        searchState: { kind: "follow" },
-        edge: movementEdge(
-          ant,
-          graph,
-          ant.searchState.origin,
-          params,
-          { exploring: false, reversingProbe: true },
-        ),
-      },
-      seed,
-    ];
-  }
-
   const [exploreDraw, choiceSeed] = nextRandom(seed);
   const hasFoodward = foodward.length > 0;
-  const exploring = !hasFoodward || exploreDraw < params.exploreRate;
-  const novelty = hasFoodward || exploreDraw < params.exploreRate;
+  const continuing = ant.searchState.kind === "explore";
+  const starting = !continuing && (!hasFoodward || exploreDraw < params.exploreRate);
+  const exploring = continuing || starting;
   const probabilities = exploring
-    ? discoveryProbabilities(ant, graph, pheromones, params, novelty)
+    ? choiceProbabilities(
+      ant.node,
+      graph.adjacency[ant.node],
+      pheromones,
+      params,
+      true,
+      ant.previous,
+    )
     : foodward;
   const [to, nextSeed] = chooseWithSeed(probabilities, choiceSeed);
-  const searchState = hasFoodward && exploring
-    ? { kind: "probe", origin: ant.node }
-    : hasFoodward
-    ? { kind: "follow" }
-    : { kind: "discover" };
+  const edge = movementEdge(ant, graph, to, { exploring });
+  const searchState = exploring ? { kind: "explore" } : { kind: "follow" };
   return [
     {
       ...ant,
       searchState,
       exploreChoices: ant.exploreChoices + Number(exploring),
       followChoices: ant.followChoices + Number(!exploring),
-      edge: movementEdge(ant, graph, to, params, { exploring }),
+      edge,
     },
     nextSeed,
   ];
 };
 
-const returnProbabilities = (
-  ant,
-  graph,
-  pheromones,
-  params,
-  channel,
-) => {
-  const direction = channel === "fast" ? -1 : 1;
-  const influence = channel === "fast" ? params.fastInfluence : params.slowInfluence;
-  const choices = gradientChoices(
+const startReturnEdge = (ant, graph, pheromones, params, seed) => {
+  if (ant.turnAround !== null) {
+    return [
+      {
+        ...ant,
+        turnAround: null,
+        edge: movementEdge(ant, graph, ant.turnAround, {
+          returnTrail: "turn",
+        }),
+      },
+      seed,
+    ];
+  }
+  const signaled = signalProbabilities(
     ant.node,
     graph.adjacency[ant.node],
-    pheromones[channel],
-    direction,
-    influence,
+    [
+      {
+        field: pheromones.fast,
+        influence: params.returnFastInfluence,
+        polarity: params.returnFastPolarity,
+      },
+      {
+        field: pheromones.slow,
+        influence: params.returnSlowInfluence,
+        polarity: params.returnSlowPolarity,
+      },
+    ],
     params,
+    ant.previous,
     edgeLengthFrom(graph, ant.node),
+    headingBiasFrom(
+      graph,
+      ant.node,
+      ant.previous,
+      params.headingInfluence,
+    ),
   );
-  return choices.length === 0 ? [] : normalizeChoices(choices);
-};
-
-const startReturnEdge = (ant, graph, pheromones, params, seed) => {
-  const preferred = ant.returnSignal ?? "fast";
-  const preferredChoices = returnProbabilities(
-    ant,
-    graph,
+  const probabilities = signaled.length > 0 ? signaled : choiceProbabilities(
+    ant.node,
+    graph.adjacency[ant.node],
     pheromones,
     params,
-    preferred,
+    true,
+    ant.previous,
   );
-  const channel = preferredChoices.length > 0 ? preferred : "slow";
-  const probabilities = preferredChoices.length > 0
-    ? preferredChoices
-    : returnProbabilities(ant, graph, pheromones, params, "slow");
-  if (probabilities.length === 0) {
-    return [{ ...ant, edge: null, returnSignal: channel }, seed];
-  }
   const [to, nextSeed] = chooseWithSeed(probabilities, seed);
   return [
     {
       ...ant,
-      returnSignal: channel,
-      edge: movementEdge(ant, graph, to, params, { returnSignal: channel }),
+      edge: movementEdge(ant, graph, to, {
+        returnTrail: signaled.length > 0 ? "signal" : "random",
+      }),
     },
     nextSeed,
   ];
@@ -654,22 +834,24 @@ const startEdge = (ant, graph, pheromones, params, seed) =>
     ? startReturnEdge(ant, graph, pheromones, params, seed)
     : startSearchEdge(ant, graph, pheromones, params, seed);
 
-const beginReturn = (ant) => ({
-  ant: {
-    ...ant,
-    edge: null,
-    mode: "return",
-    searchState: { kind: "follow" },
-    foodLevel: 1,
-    returnSignal: null,
-  },
-  events: [{
-    type: "discovery",
-    distance: ant.tripDistance,
-    food: ant.node,
-  }],
-  deposits: [],
-});
+const beginReturn = (ant) => {
+  return {
+    ant: {
+      ...ant,
+      edge: null,
+      mode: "return",
+      searchState: { kind: "follow" },
+      turnAround: ant.previous,
+      previous: null,
+    },
+    events: [{
+      type: "discovery",
+      distance: ant.tripDistance,
+      food: ant.node,
+    }],
+    deposits: [],
+  };
+};
 
 const arriveSearching = (ant, graph) => {
   const atHill = ant.edge.to === graph.hill;
@@ -680,7 +862,7 @@ const arriveSearching = (ant, graph) => {
     previous: atHill ? null : ant.edge.from,
     tripDistance: atHill ? 0 : ant.tripDistance + ant.edge.length,
     homeLevel: atHill ? 1 : ant.edge.homeTo,
-    searchState: atHill ? { kind: "discover" } : ant.searchState,
+    searchState: atHill ? { kind: "follow" } : ant.searchState,
   };
   return graph.foods.includes(ant.edge.to)
     ? beginReturn(arrived)
@@ -695,7 +877,6 @@ const arriveReturning = (ant, graph) => {
     edge: null,
     previous: ant.edge.from,
     homeLevel: atHill ? 1 : ant.edge.homeTo,
-    foodLevel: ant.edge.foodTo,
   };
 
   return atHill
@@ -707,8 +888,7 @@ const arriveReturning = (ant, graph) => {
         searchState: { kind: "follow" },
         tripDistance: 0,
         homeLevel: 1,
-        foodLevel: 0,
-        returnSignal: null,
+        turnAround: null,
         trips: ant.trips + 1,
       },
       events: [{ type: "delivery" }],
@@ -719,30 +899,33 @@ const arriveReturning = (ant, graph) => {
 
 const arrive = (ant, graph, params) => {
   const returning = ant.mode === "return";
-  const slowDeposit = {
-    channel: "slow",
-    edge: edgeKey(ant.edge.from, ant.edge.to),
-    amount: params.slowDeposit,
-    levels: returning ? [] : [
-      [ant.edge.from, ant.edge.homeFrom],
-      [ant.edge.to, ant.edge.homeTo],
-    ],
-  };
+  const slowDeposits = returning ? [] : [
+    {
+      channel: "slow",
+      node: ant.edge.from,
+      amount: ant.edge.homeFrom,
+      combine: "max",
+    },
+    {
+      channel: "slow",
+      node: ant.edge.to,
+      amount: ant.edge.homeTo,
+      combine: "max",
+    },
+  ];
   const result = returning ? arriveReturning(ant, graph) : arriveSearching(ant, graph);
-  const fastDeposits = returning
+  const foundFood = !returning && graph.foods.includes(ant.edge.to);
+  const fastDeposits = returning || foundFood
     ? [{
       channel: "fast",
-      edge: edgeKey(ant.edge.from, ant.edge.to),
+      node: ant.edge.to,
       amount: params.fastDeposit,
-      levels: [
-        [ant.edge.from, ant.edge.foodFrom],
-        [ant.edge.to, ant.edge.foodTo],
-      ],
+      combine: "add",
     }]
     : [];
   return {
     ...result,
-    deposits: [slowDeposit, ...fastDeposits, ...result.deposits],
+    deposits: [...slowDeposits, ...fastDeposits, ...result.deposits],
   };
 };
 
@@ -831,26 +1014,15 @@ const advanceAnt = (
 
 const addDeposits = (pheromones, deposits) =>
   deposits.reduce(
-    (fields, deposit) => {
-      const field = fields[deposit.channel];
-      const nodes = deposit.levels.reduce(
-        (values, [node, level]) => ({
-          ...values,
-          [node]: Math.max(values[node], level),
-        }),
-        field.nodes,
-      );
-      return {
-        ...fields,
-        [deposit.channel]: {
-          nodes,
-          edges: {
-            ...field.edges,
-            [deposit.edge]: field.edges[deposit.edge] + deposit.amount,
-          },
-        },
-      };
-    },
+    (fields, deposit) => ({
+      ...fields,
+      [deposit.channel]: {
+        ...fields[deposit.channel],
+        [deposit.node]: deposit.combine === "max"
+          ? Math.max(fields[deposit.channel][deposit.node], deposit.amount)
+          : fields[deposit.channel][deposit.node] + deposit.amount,
+      },
+    }),
     pheromones,
   );
 
@@ -868,6 +1040,21 @@ const updateStats = (stats, events) =>
     };
   }, stats);
 
+export const explorationStopProbability = (chancePerSecond, seconds) =>
+  1 - Math.pow(1 - chancePerSecond, seconds);
+
+const maybeStopExploring = (ant, params, seed, dt) => {
+  if (ant.mode !== "search" || ant.searchState.kind !== "explore") {
+    return { ant, seed };
+  }
+  const [random, nextSeed] = nextRandom(seed);
+  const chance = explorationStopProbability(params.stopExploreChance, dt);
+  return {
+    ant: random < chance ? { ...ant, searchState: { kind: "follow" } } : ant,
+    seed: nextSeed,
+  };
+};
+
 export const stepSimulation = (state, seconds) => {
   const dt = clamp(0, 0.25, finiteOr(0, seconds));
   if (dt === 0) return state;
@@ -876,12 +1063,18 @@ export const stepSimulation = (state, seconds) => {
     .toSorted((first, second) => first.id - second.id)
     .reduce(
       (result, ant) => {
-        const next = advanceAnt(
+        const ready = maybeStopExploring(
           ant,
+          state.params,
+          result.rngSeed,
+          dt,
+        );
+        const next = advanceAnt(
+          ready.ant,
           state.graph,
           decayed,
           state.params,
-          result.rngSeed,
+          ready.seed,
           dt,
         );
         return {
@@ -908,7 +1101,12 @@ export const updateParams = (state, patch) => {
   const params = sanitizeParams({ ...state.params, ...patch });
   const difference = params.antCount - state.ants.length;
   const generated = difference > 0
-    ? generateAnts(difference, state.graph.hill, state.rngSeed, state.ants.length)
+    ? generateAnts(
+      difference,
+      state.graph.hill,
+      state.rngSeed,
+      state.ants.length,
+    )
     : { ants: [], rngSeed: state.rngSeed };
   return {
     ...state,
@@ -1032,21 +1230,14 @@ export const setEndpoint = (state, kind, nodeId) => {
 };
 
 export const deriveMetrics = (state) => {
-  const fastValues = Object.values(state.pheromones.fast.edges);
+  const fastValues = Object.values(state.pheromones.fast);
   const totalFast = fastValues.reduce((sum, value) => sum + value, 0);
-  const strongestByNode = state.graph.nodes.map(({ id }) =>
-    Math.max(
-      0,
-      ...state.graph.adjacency[id].map(
-        (neighbor) => trailOnEdge(state.pheromones.fast, id, neighbor),
-      ),
-    )
-  );
-  const signalFocus = totalFast <= EPSILON
-    ? 0
-    : strongestByNode.reduce((sum, value) => sum + value, 0) /
-      (2 * totalFast);
   const selected = dominantFoodRoute(state);
+  const selectedSignal = selected?.route.reduce(
+    (sum, node) => sum + state.pheromones.fast[node],
+    0,
+  ) ?? 0;
+  const signalFocus = totalFast <= EPSILON ? 0 : selectedSignal / totalFast;
   const efficiency = selected ? state.stats.shortestDistance / selected.distance : 0;
 
   return {
@@ -1063,39 +1254,52 @@ export const deriveMetrics = (state) => {
     exploring: state.ants.filter(
       (ant) =>
         ant.mode === "search" &&
-        (["discover", "probe"].includes(ant.searchState.kind) ||
-          ant.edge?.exploring === true),
+        (ant.searchState.kind === "explore" || ant.edge?.exploring === true),
     ).length,
   };
 };
 
 export const dominantFoodRoute = (state) => {
-  const walk = (route, distance) => {
-    const node = route.at(-1);
-    if (state.graph.foods.includes(node)) return { route, distance };
-    if (route.length > state.graph.nodes.length) return null;
-
-    const neighbors = state.graph.adjacency[node].filter((neighbor) =>
-      !route.includes(neighbor)
-    );
-    const probabilities = choiceProbabilities(
-      node,
-      neighbors,
-      state.pheromones,
-      state.params,
-      false,
-      null,
-      (neighbor) => state.graph.edgeById[edgeKey(node, neighbor)].length,
-    );
-    if (probabilities.length === 0) return null;
-    const next = probabilities.toSorted(
-      (first, second) => second.probability - first.probability,
-    )[0].node;
-    const edge = state.graph.edgeById[edgeKey(node, next)];
-    return walk([...route, next], distance + edge.length);
+  if (Object.values(state.pheromones.fast).every((value) => value <= EPSILON)) {
+    return null;
+  }
+  const visit = (node, route, routeDistance, seen) => {
+    if (state.graph.foods.includes(node)) {
+      return { found: { route, distance: routeDistance }, seen };
+    }
+    const options = state.graph.adjacency[node]
+      .filter((neighbor) =>
+        !seen.includes(neighbor) &&
+        state.pheromones.fast[neighbor] > EPSILON
+      )
+      .map((neighbor) => {
+        const edge = state.graph.edgeById[edgeKey(node, neighbor)];
+        return {
+          node: neighbor,
+          edge,
+          score: state.pheromones.fast[neighbor] / edge.length,
+        };
+      })
+      .toSorted((first, second) => second.score - first.score);
+    const tryNext = (remaining, visited) => {
+      if (remaining.length === 0) return { found: null, seen: visited };
+      const [option, ...rest] = remaining;
+      const result = visit(
+        option.node,
+        [...route, option.node],
+        routeDistance + option.edge.length,
+        [...visited, option.node],
+      );
+      return result.found ? result : tryNext(rest, result.seen);
+    };
+    return tryNext(options, seen);
   };
-
-  return walk([state.graph.hill], 0);
+  return visit(
+    state.graph.hill,
+    [state.graph.hill],
+    0,
+    [state.graph.hill],
+  ).found;
 };
 
 export const foodProbabilitiesForNode = (state, nodeId) => {

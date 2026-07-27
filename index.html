@@ -39,9 +39,9 @@
             <h2 id="stage-heading">Graph field</h2>
           </div>
           <div class="legend" aria-label="Visualization legend">
-            <span><i class="legend-slow"></i>Persistent gradient</span>
-            <span><i class="legend-fast"></i>Food gradient</span>
-            <span><i class="legend-explore"></i>Trying another way</span>
+            <span><i class="legend-slow"></i>Persistent level</span>
+            <span><i class="legend-fast"></i>Food level</span>
+            <span><i class="legend-explore"></i>Scouting</span>
           </div>
         </div>
 
@@ -61,7 +61,7 @@
 
         <div class="stage-footer">
           <p id="stage-status">
-            The whole colony is exploring and extending the persistent gradient.
+            The whole colony is scouting random branches.
           </p>
           <dl>
             <div>
@@ -100,6 +100,7 @@
             <button id="new-graph" class="button">New graph</button>
             <button id="reset-run" class="button">Reset run</button>
             <button id="clear-trails" class="button">Clear trails</button>
+            <button id="copy-share-link" class="button">Copy share link</button>
           </div>
         </section>
 
@@ -122,7 +123,7 @@
             <div>
               <dt>Signal focus</dt>
               <dd id="signal-focus">0%</dd>
-              <small>dominant food edges</small>
+              <small>signal on leading trail</small>
             </div>
           </dl>
         </section>
@@ -137,13 +138,108 @@
               <span>Ants <output id="antCount-value">64</output></span>
               <input id="antCount" type="range" min="8" max="120" value="64">
             </label>
-            <label class="slider-row" for="exploreRate">
-              <span>Explore chance <output id="exploreRate-value">5%</output></span>
-              <input id="exploreRate" type="range" min="0" max="30" value="5">
-            </label>
             <label class="slider-row" for="speed">
               <span>Ant speed <output id="speed-value">0.17 u/s</output></span>
               <input id="speed" type="range" min="4" max="65" value="17">
+            </label>
+          </div>
+
+          <div class="preset-box">
+            <label for="algorithm-preset-name">Algorithm presets</label>
+            <div class="preset-row">
+              <input id="algorithm-preset-name" type="text"
+                maxlength="40" placeholder="Name this algorithm">
+              <button id="save-algorithm-preset" class="button"
+                type="button">Save</button>
+            </div>
+            <div class="preset-row">
+              <select id="algorithm-presets" aria-label="Saved algorithm presets">
+                <option value="">No saved algorithms</option>
+              </select>
+              <button id="load-algorithm-preset" class="button"
+                type="button">Load</button>
+              <button id="delete-algorithm-preset" class="button"
+                type="button">Delete</button>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Scouting</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="exploreRate">
+              <span>Enter scouting <output id="exploreRate-value">2%</output></span>
+              <input id="exploreRate" type="range" min="0" max="30" value="2">
+            </label>
+            <label class="slider-row" for="stopExploreChance">
+              <span>Stop scouting <output id="stopExploreChance-value">12% / s</output></span>
+              <input id="stopExploreChance" type="range" min="1" max="95" value="12">
+            </label>
+            <label class="slider-row" for="exploreSignalBias">
+              <span>Persistent-signal bias <output id="exploreSignalBias-value">ignore</output></span>
+              <input id="exploreSignalBias" type="range" min="-40" max="40" value="0">
+            </label>
+            <label class="slider-row" for="reversePenalty">
+              <span>U-turn weight <output id="reversePenalty-value">18%</output></span>
+              <input id="reversePenalty" type="range" min="1" max="100" value="18">
+            </label>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Local movement</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="headingInfluence">
+              <span>Straight-ahead bias <output id="headingInfluence-value">1.6×</output></span>
+              <input id="headingInfluence" type="range" min="0" max="40" value="16">
+            </label>
+            <label class="slider-row" for="distanceInfluence">
+              <span>Short-edge bias <output id="distanceInfluence-value">1.0×</output></span>
+              <input id="distanceInfluence" type="range" min="0" max="20" value="10">
+            </label>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Outbound decisions</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="fastInfluence">
+              <span>Food-signal pull <output id="fastInfluence-value">3.2×</output></span>
+              <input id="fastInfluence" type="range" min="0" max="100" value="32">
+            </label>
+            <label class="slider-row" for="outboundPolarity">
+              <span>Food polarity <output id="outboundPolarity-value">ignore</output></span>
+              <input id="outboundPolarity" type="range" min="-40" max="40" value="0">
+            </label>
+          </div>
+
+          <hr>
+
+          <div class="section-heading compact">
+            <h2>Homebound decisions</h2>
+          </div>
+          <div class="slider-list">
+            <label class="slider-row" for="returnFastInfluence">
+              <span>Food-signal pull <output id="returnFastInfluence-value">1.0×</output></span>
+              <input id="returnFastInfluence" type="range" min="0" max="100" value="10">
+            </label>
+            <label class="slider-row" for="returnSlowInfluence">
+              <span>Persistent-signal pull <output id="returnSlowInfluence-value">8.0×</output></span>
+              <input id="returnSlowInfluence" type="range" min="0" max="100" value="80">
+            </label>
+            <label class="slider-row" for="returnFastPolarity">
+              <span>Food polarity <output id="returnFastPolarity-value">ignore</output></span>
+              <input id="returnFastPolarity" type="range" min="-40" max="40" value="0">
+            </label>
+            <label class="slider-row" for="returnSlowPolarity">
+              <span>Persistent polarity <output id="returnSlowPolarity-value">4.0× climb</output></span>
+              <input id="returnSlowPolarity" type="range" min="-40" max="40" value="40">
             </label>
           </div>
 
@@ -157,17 +253,9 @@
               <span>Persistent half-life <output id="slowHalfLife-value">42 s</output></span>
               <input id="slowHalfLife" type="range" min="5" max="120" value="42">
             </label>
-            <label class="slider-row" for="slowInfluence">
-              <span>Familiar trail pull <output id="slowInfluence-value">0.5×</output></span>
-              <input id="slowInfluence" type="range" min="0" max="80" value="5">
-            </label>
             <label class="slider-row" for="fastHalfLife">
               <span>Food half-life <output id="fastHalfLife-value">9 s</output></span>
               <input id="fastHalfLife" type="range" min="2" max="40" value="9">
-            </label>
-            <label class="slider-row" for="fastInfluence">
-              <span>Food influence <output id="fastInfluence-value">3.2×</output></span>
-              <input id="fastInfluence" type="range" min="0" max="100" value="32">
             </label>
           </div>
 
@@ -186,11 +274,40 @@
               <span>Density <output id="density-value">42%</output></span>
               <input id="density" type="range" min="5" max="90" value="42">
             </label>
+            <label class="slider-row" for="islandCount">
+              <span>Islands <output id="islandCount-value">3</output></span>
+              <input id="islandCount" type="range" min="1" max="12" value="3">
+            </label>
+            <label class="slider-row" for="islandSeparation">
+              <span>Island separation <output id="islandSeparation-value">65%</output></span>
+              <input id="islandSeparation" type="range" min="0" max="90" value="65">
+            </label>
+            <label class="slider-row" for="islandLinks">
+              <span>Bridges per link <output id="islandLinks-value">2</output></span>
+              <input id="islandLinks" type="range" min="1" max="6" value="2">
+            </label>
           </div>
           <div class="seed-row">
             <label for="seed">Graph seed</label>
             <input id="seed" type="number" min="0" max="4294967295" value="1837">
             <button id="load-seed" class="button">Load</button>
+          </div>
+
+          <div class="preset-box">
+            <label for="map-preset-name">Map presets</label>
+            <div class="preset-row">
+              <input id="map-preset-name" type="text"
+                maxlength="40" placeholder="Name this map">
+              <button id="save-map-preset" class="button" type="button">Save</button>
+            </div>
+            <div class="preset-row">
+              <select id="map-presets" aria-label="Saved map presets">
+                <option value="">No saved maps</option>
+              </select>
+              <button id="load-map-preset" class="button" type="button">Load</button>
+              <button id="delete-map-preset" class="button"
+                type="button">Delete</button>
+            </div>
           </div>
 
           <div class="toggle-row">
@@ -224,8 +341,8 @@
             <p id="food-action-help" class="action-help"></p>
             <ol id="probabilities" class="probabilities"></ol>
             <p id="probability-empty" class="muted">
-              No usable food signal here. A searching ant explores; a carrier
-              follows the local hill gradient.
+              No usable food signal here. A searching ant scouts; a carrier
+              uses the configured homebound cues.
             </p>
           </div>
         </section>
@@ -240,21 +357,19 @@
           </summary>
           <div>
             <p>
-              Each field stores an undirected amount on an edge and a scalar
-              concentration at each endpoint. Ants never deposit an arrow; the
-              visible arrow is derived from the weaker endpoint toward the
-              stronger one. Every ant initially explores, extending a
-              persistent concentration gradient away from the hill.
+              Each pheromone is one scalar level per node. At a junction, an
+              ant measures each branch at its opposite endpoint. Edge shading
+              and arrows interpolate the endpoint levels; the arrow shows
+              concentration slope, not an automatic destination.
             </p>
             <p class="formula">P(edge) = weight(edge) / Σ weight(options)</p>
             <p>
-              The first carrier climbs the persistent hill gradient while
-              extending a short-lived gradient from food. Later outbound ants
-              climb that food gradient and carriers descend the same field back
-              to the hill. A temporary novelty choice can try a less-covered
-              edge; there is no scout caste or remembered route. Equal-speed
-              ants renew short routes more often. Add or move food and the old
-              field fades while the uninterrupted colony adapts.
+              The controls mix endpoint strength, optional polarity, local
+              heading, edge length, and U-turn cost independently for outbound
+              and homebound ants. Scouting is a random mode with a stochastic
+              exit chance. Only ants visibly carrying food deposit food signal.
+              No ant stores a route or visited set. Short routes are renewed
+              more often because every ant moves at one physical speed.
             </p>
           </div>
         </details>
@@ -263,7 +378,7 @@
 
     <footer>
       <p>PURE CORE / SEEDED RANDOMNESS / LOCAL DECISIONS</p>
-      <p>FORMIC LAB · <span>scalar trails / locally derived gradients</span></p>
+      <p>FORMIC LAB · <span>node fields / configurable local decisions</span></p>
     </footer>
 
     <script type="module" src="./src/app.js"></script>

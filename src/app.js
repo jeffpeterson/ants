@@ -12,6 +12,13 @@ import {
   stepSimulation,
   updateParams,
 } from "./colony.js";
+import {
+  algorithmPreset,
+  decodeConfiguration,
+  encodeConfiguration,
+  mapPreset,
+  sharedConfiguration,
+} from "./config.js";
 
 const byId = (id) => document.getElementById(id);
 const canvas = byId("colony-canvas");
@@ -19,10 +26,23 @@ const context = canvas.getContext("2d");
 const prefersReducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const readSeed = () => Number(byId("seed").value) >>> 0;
-const initialSeed = readSeed();
+const sharedHash = location.hash.startsWith("#state=")
+  ? decodeConfiguration(location.hash.slice(7))
+  : null;
+const initialSeed = sharedHash?.map.seed ?? readSeed();
+const initialParams = {
+  ...sharedHash?.algorithm,
+  ...sharedHash?.map.params,
+};
+byId("seed").value = initialSeed;
 
 let model = {
-  simulation: createSimulation({ seed: initialSeed }),
+  simulation: createSimulation({
+    seed: initialSeed,
+    params: initialParams,
+    hill: sharedHash?.map.hill,
+    foods: sharedHash?.map.foods,
+  }),
   running: !prefersReducedMotion,
   selectedNode: null,
   movingFood: null,
@@ -75,6 +95,28 @@ const reduceModel = (current, action) => {
         simulation: updateParams(current.simulation, {
           [action.name]: action.value,
         }),
+      };
+    case "algorithmPreset":
+      return {
+        ...current,
+        simulation: updateParams(current.simulation, action.params),
+        notice: `Loaded algorithm “${action.name}”.`,
+      };
+    case "mapPreset":
+      return {
+        ...replaceSimulation(
+          current,
+          createSimulation({
+            seed: action.map.seed,
+            params: {
+              ...current.simulation.params,
+              ...action.map.params,
+            },
+            hill: action.map.hill,
+            foods: action.map.foods,
+          }),
+        ),
+        notice: `Loaded map “${action.name}”.`,
       };
     case "select":
       return action.place && current.movingFood !== null
@@ -149,6 +191,8 @@ const reduceModel = (current, action) => {
         ...current,
         view: { ...current.view, [action.name]: action.value },
       };
+    case "notice":
+      return { ...current, notice: action.notice };
     default:
       return current;
   }
@@ -156,6 +200,8 @@ const reduceModel = (current, action) => {
 
 const dispatch = (action) => {
   model = reduceModel(model, action);
+  updateSharedUrl(model.simulation);
+  syncControls(model.simulation);
   renderInterface(model);
 };
 
@@ -172,10 +218,10 @@ const statusCopy = (current, metrics) => {
     return "Food changed. Old signals remain while the colony searches and adapts.";
   }
   if (metrics.deliveries === 0 && metrics.discoveries === 0) {
-    return "The whole colony is exploring and extending the persistent gradient.";
+    return "The whole colony is scouting random branches.";
   }
   if (metrics.deliveries === 0) {
-    return "Food found. Returning ants are extending the food gradient.";
+    return "Food found. Carriers are extending the food field.";
   }
   return `${metrics.deliveries} deliveries · ${
     formatPercent(metrics.efficiency)
@@ -380,7 +426,6 @@ const drawPheromoneEdge = (
     offset,
     width,
     dashed = false,
-    elapsed = 0,
   },
 ) => {
   const intensity = strength(amount);
@@ -401,7 +446,6 @@ const drawPheromoneEdge = (
   context.lineCap = "round";
   if (dashed) {
     context.setLineDash([7, 8]);
-    context.lineDashOffset = -elapsed * 18;
   }
   line(context, start, end);
   context.restore();
@@ -415,9 +459,9 @@ const drawSlowPheromones = (simulation, points) =>
     drawPheromoneEdge(
       points[edge.a],
       points[edge.b],
-      simulation.pheromones.slow.edges[edge.id],
-      simulation.pheromones.slow.nodes[edge.a],
-      simulation.pheromones.slow.nodes[edge.b],
+      simulation.pheromones.slow[edge.a] + simulation.pheromones.slow[edge.b],
+      simulation.pheromones.slow[edge.a],
+      simulation.pheromones.slow[edge.b],
       {
         color: "#c58b2a",
         faint: "rgba(197, 139, 42, 0.06)",
@@ -433,9 +477,9 @@ const drawFastPheromones = (simulation, points) =>
     drawPheromoneEdge(
       points[edge.a],
       points[edge.b],
-      simulation.pheromones.fast.edges[edge.id],
-      simulation.pheromones.fast.nodes[edge.a],
-      simulation.pheromones.fast.nodes[edge.b],
+      simulation.pheromones.fast[edge.a] + simulation.pheromones.fast[edge.b],
+      simulation.pheromones.fast[edge.a],
+      simulation.pheromones.fast[edge.b],
       {
         color: "#087f8c",
         faint: "rgba(8, 127, 140, 0.08)",
@@ -443,7 +487,6 @@ const drawFastPheromones = (simulation, points) =>
         offset: -3.2,
         width: (intensity) => 1.2 + intensity * 4.6,
         dashed: true,
-        elapsed: simulation.elapsed,
       },
     )
   );
@@ -560,18 +603,27 @@ const drawAnt = (ant, points) => {
   const target = ant.edge ? points[ant.edge.to] : point;
   const angle = Math.atan2(target.y - point.y, target.x - point.x);
   const exploring = ant.mode === "search" &&
-    (["discover", "probe"].includes(ant.searchState.kind) ||
+    (ant.searchState.kind === "explore" ||
       ant.edge?.exploring === true);
   context.save();
   context.translate(point.x, point.y);
   context.rotate(angle);
-  context.fillStyle = ant.mode === "return" ? "#087f8c" : "#172129";
+  context.fillStyle = "#172129";
   context.beginPath();
   context.ellipse(-2, 0, 3.2, 2.2, 0, 0, Math.PI * 2);
   context.fill();
   context.beginPath();
   context.arc(2.4, 0, 1.8, 0, Math.PI * 2);
   context.fill();
+  if (ant.mode === "return") {
+    context.fillStyle = "#91bd2b";
+    context.strokeStyle = "#fffaf0";
+    context.lineWidth = 0.9;
+    context.beginPath();
+    context.ellipse(5.7, -0.2, 2.6, 2, -0.25, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  }
   if (exploring) {
     context.strokeStyle = "#e75b2a";
     context.lineWidth = 1.2;
@@ -629,17 +681,135 @@ bindButton("move-food", () => ({ type: "beginFoodMove" }));
 bindButton("remove-food", () => ({ type: "removeFood" }));
 bindButton("cancel-food-move", () => ({ type: "cancelFoodMove" }));
 
+const polarityLabel = (value) => {
+  const scaled = Number(value) / 10;
+  if (scaled === 0) return "ignore";
+  return `${Math.abs(scaled).toFixed(1)}× ${scaled < 0 ? "descend" : "climb"}`;
+};
+
+const signalBiasLabel = (value) => {
+  const scaled = Number(value) / 10;
+  if (scaled === 0) return "ignore";
+  return `${Math.abs(scaled).toFixed(1)}× ${scaled < 0 ? "avoid" : "seek"}`;
+};
+
 const sliderConfigs = [
-  ["antCount", (value) => Number(value), (value) => `${value}`],
-  ["exploreRate", (value) => Number(value) / 100, (value) => `${value}%`],
-  ["speed", (value) => Number(value) / 100, (value) => `${Number(value) / 100} u/s`],
-  ["slowHalfLife", Number, (value) => `${value} s`],
-  ["fastHalfLife", Number, (value) => `${value} s`],
-  ["slowInfluence", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
-  ["fastInfluence", (value) => Number(value) / 10, (value) => `${Number(value) / 10}×`],
-  ["nodeCount", Number, (value) => `${value}`],
-  ["density", (value) => Number(value) / 100, (value) => `${value}%`],
+  ["antCount", Number, (value) => `${value}`, (value) => value],
+  [
+    "exploreRate",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
+    "stopExploreChance",
+    (value) => Number(value) / 100,
+    (value) => `${value}% / s`,
+    (value) => value * 100,
+  ],
+  [
+    "exploreSignalBias",
+    (value) => Number(value) / 10,
+    signalBiasLabel,
+    (value) => value * 10,
+  ],
+  [
+    "reversePenalty",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  [
+    "speed",
+    (value) => Number(value) / 100,
+    (value) => `${Number(value) / 100} u/s`,
+    (value) => value * 100,
+  ],
+  [
+    "headingInfluence",
+    (value) => Number(value) / 10,
+    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    (value) => value * 10,
+  ],
+  [
+    "distanceInfluence",
+    (value) => Number(value) / 10,
+    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    (value) => value * 10,
+  ],
+  [
+    "fastInfluence",
+    (value) => Number(value) / 10,
+    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    (value) => value * 10,
+  ],
+  [
+    "outboundPolarity",
+    (value) => Number(value) / 10,
+    polarityLabel,
+    (value) => value * 10,
+  ],
+  [
+    "returnFastInfluence",
+    (value) => Number(value) / 10,
+    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    (value) => value * 10,
+  ],
+  [
+    "returnSlowInfluence",
+    (value) => Number(value) / 10,
+    (value) => `${(Number(value) / 10).toFixed(1)}×`,
+    (value) => value * 10,
+  ],
+  [
+    "returnFastPolarity",
+    (value) => Number(value) / 10,
+    polarityLabel,
+    (value) => value * 10,
+  ],
+  [
+    "returnSlowPolarity",
+    (value) => Number(value) / 10,
+    polarityLabel,
+    (value) => value * 10,
+  ],
+  ["slowHalfLife", Number, (value) => `${value} s`, (value) => value],
+  ["fastHalfLife", Number, (value) => `${value} s`, (value) => value],
+  ["nodeCount", Number, (value) => `${value}`, (value) => value],
+  [
+    "density",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  ["islandCount", Number, (value) => `${value}`, (value) => value],
+  [
+    "islandSeparation",
+    (value) => Number(value) / 100,
+    (value) => `${value}%`,
+    (value) => value * 100,
+  ],
+  ["islandLinks", Number, (value) => `${value}`, (value) => value],
 ];
+
+const syncControls = (simulation) => {
+  sliderConfigs.forEach(([name, , format, toInput]) => {
+    const input = byId(name);
+    const value = toInput(simulation.params[name]);
+    input.value = value;
+    byId(`${name}-value`).textContent = format(value);
+  });
+  byId("seed").value = simulation.graphSeed;
+};
+
+const updateSharedUrl = (simulation) => {
+  const encoded = encodeConfiguration(sharedConfiguration(simulation));
+  history.replaceState(
+    null,
+    "",
+    `${location.pathname}${location.search}#state=${encoded}`,
+  );
+};
 
 sliderConfigs.forEach(([name, parse, format]) => {
   const input = byId(name);
@@ -650,6 +820,158 @@ sliderConfigs.forEach(([name, parse, format]) => {
   };
   input.addEventListener("input", update);
   output.textContent = format(input.value);
+});
+
+const readPresetLibrary = (key) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
+    return parsed !== null && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writePresetLibrary = (key, library) => {
+  localStorage.setItem(key, JSON.stringify(library));
+  return library;
+};
+
+const ALGORITHM_PRESET_KEY = "formic.algorithm-presets.v1";
+const MAP_PRESET_KEY = "formic.map-presets.v1";
+let algorithmPresets = readPresetLibrary(ALGORITHM_PRESET_KEY);
+let mapPresets = readPresetLibrary(MAP_PRESET_KEY);
+
+const renderPresetOptions = (id, library, emptyLabel, selected = "") => {
+  const select = byId(id);
+  const names = Object.keys(library).toSorted((left, right) =>
+    left.localeCompare(right)
+  );
+  select.replaceChildren(
+    ...(names.length === 0
+      ? [new Option(emptyLabel, "")]
+      : names.map((name) => new Option(name, name))),
+  );
+  select.value = names.includes(selected) ? selected : names[0] ?? "";
+};
+
+const saveNamedPreset = ({
+  inputId,
+  selectId,
+  storageKey,
+  library,
+  value,
+  emptyLabel,
+}) => {
+  const input = byId(inputId);
+  const name = input.value.trim();
+  if (name === "") {
+    dispatch({ type: "notice", notice: "Give the preset a name first." });
+    input.focus();
+    return library;
+  }
+  if (Object.hasOwn(library, name) && !confirm(`Replace “${name}”?`)) {
+    return library;
+  }
+  const next = writePresetLibrary(storageKey, { ...library, [name]: value });
+  renderPresetOptions(selectId, next, emptyLabel, name);
+  input.value = "";
+  dispatch({ type: "notice", notice: `Saved “${name}”.` });
+  return next;
+};
+
+const deleteNamedPreset = ({
+  selectId,
+  storageKey,
+  library,
+  emptyLabel,
+}) => {
+  const name = byId(selectId).value;
+  if (name === "" || !confirm(`Delete “${name}”?`)) return library;
+  const next = Object.fromEntries(
+    Object.entries(library).filter(([saved]) => saved !== name),
+  );
+  writePresetLibrary(storageKey, next);
+  renderPresetOptions(selectId, next, emptyLabel);
+  dispatch({ type: "notice", notice: `Deleted “${name}”.` });
+  return next;
+};
+
+renderPresetOptions(
+  "algorithm-presets",
+  algorithmPresets,
+  "No saved algorithms",
+);
+renderPresetOptions("map-presets", mapPresets, "No saved maps");
+
+byId("save-algorithm-preset").addEventListener("click", () => {
+  algorithmPresets = saveNamedPreset({
+    inputId: "algorithm-preset-name",
+    selectId: "algorithm-presets",
+    storageKey: ALGORITHM_PRESET_KEY,
+    library: algorithmPresets,
+    value: algorithmPreset(model.simulation),
+    emptyLabel: "No saved algorithms",
+  });
+});
+
+byId("load-algorithm-preset").addEventListener("click", () => {
+  const name = byId("algorithm-presets").value;
+  if (name !== "") {
+    dispatch({
+      type: "algorithmPreset",
+      name,
+      params: algorithmPresets[name],
+    });
+  }
+});
+
+byId("delete-algorithm-preset").addEventListener("click", () => {
+  algorithmPresets = deleteNamedPreset({
+    selectId: "algorithm-presets",
+    storageKey: ALGORITHM_PRESET_KEY,
+    library: algorithmPresets,
+    emptyLabel: "No saved algorithms",
+  });
+});
+
+byId("save-map-preset").addEventListener("click", () => {
+  mapPresets = saveNamedPreset({
+    inputId: "map-preset-name",
+    selectId: "map-presets",
+    storageKey: MAP_PRESET_KEY,
+    library: mapPresets,
+    value: mapPreset(model.simulation),
+    emptyLabel: "No saved maps",
+  });
+});
+
+byId("load-map-preset").addEventListener("click", () => {
+  const name = byId("map-presets").value;
+  if (name !== "") {
+    dispatch({ type: "mapPreset", name, map: mapPresets[name] });
+  }
+});
+
+byId("delete-map-preset").addEventListener("click", () => {
+  mapPresets = deleteNamedPreset({
+    selectId: "map-presets",
+    storageKey: MAP_PRESET_KEY,
+    library: mapPresets,
+    emptyLabel: "No saved maps",
+  });
+});
+
+byId("copy-share-link").addEventListener("click", async () => {
+  updateSharedUrl(model.simulation);
+  try {
+    await navigator.clipboard.writeText(location.href);
+    dispatch({ type: "notice", notice: "Share link copied." });
+  } catch {
+    dispatch({
+      type: "notice",
+      notice: "Could not access the clipboard. Copy the address bar instead.",
+    });
+  }
 });
 
 ["ants", "trails", "labels"].forEach((name) => {
@@ -730,5 +1052,7 @@ const frame = (time) => {
   requestAnimationFrame(frame);
 };
 
+syncControls(model.simulation);
+updateSharedUrl(model.simulation);
 renderInterface(model);
 requestAnimationFrame(frame);

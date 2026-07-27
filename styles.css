@@ -543,6 +543,47 @@ hr {
   padding: 6px;
 }
 
+.preset-box {
+  display: grid;
+  gap: 7px;
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.preset-box > label {
+  color: #3e4b52;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+}
+
+.preset-row:first-of-type {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.preset-row input,
+.preset-row select {
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--line-dark);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface-strong);
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.preset-row .button {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
 .toggle-row {
   display: flex;
   justify-content: space-between;
