@@ -2,11 +2,12 @@
 
 This document defines how to compare historical algorithm families without confusing
 algorithm behavior with graph generation, resource changes, or measurement drift. It
-also records one exploratory, read-only screen that motivated a larger experiment.
+records both the exploratory screen that motivated the experiment and the completed
+five-seed common-graph screen.
 
-The screen is evidence about specific revisions under a narrow protocol. It is not a
-claim that one family is universally better, and it did not reproduce a 50-fold
-throughput difference.
+These screens are evidence about specific revisions under a narrow protocol. They are
+not a claim that one family is universally better, and they did not reproduce a 50-fold
+aggregate throughput difference.
 
 ## Benchmark contract
 
@@ -236,6 +237,130 @@ That factorial comparison is needed to attribute causality. A comparison between
 whole commits cannot by itself separate route memory, pheromone representation,
 exploration policy, graph recipe, and tuning.
 
+## Completed five-seed common-lane screen
+
+The fast common-graph screen loaded the engine adapters from main revision `d7de3a9`.
+Revision `3b41bda` then registered those same adapters with the benchmark command used
+below. It used all eight registered engines, the six frozen current screening graphs,
+five paired colony seeds per graph, `N = 64`, `v = 0.17`, and `dt = 0.25 s`. This
+produced 30 paired runs per engine and 240 runs overall.
+
+The exact command was:
+
+```sh
+deno task benchmark \
+  --engines=scalar-field,A0,A1,A2,A3,A4,B0,B1 \
+  --lane=common \
+  --limit=6 \
+  --run-seeds=90001,194730,299459,404188,508917 \
+  --dt=0.25 \
+  --out=.runs/historical-common-five-seed.json
+```
+
+The graph fixtures were `train-01`, `train-06`, `train-08`, `train-11`, `train-15`, and
+`train-18`. Every engine received the same graph snapshot and run seed within a pair.
+`Q` is the delivery count in `[20u, 32u]` divided by 384. “Visible” is the exact
+`[0 s, 30 s]` window. The two zero columns below count runs with no delivery inside that
+named window; they are not relabeled as failures over the entire horizon. A win is a
+strictly higher `Q` than current on the corresponding graph and run seed. There were no
+ties.
+
+| Engine         | Family       |  Mean `Q` | Median `Q` |         Min–max | Steady deliveries | Visible deliveries total (mean/run) | Zero visible / steady | Wins–losses vs current |
+| -------------- | ------------ | --------: | ---------: | --------------: | ----------------: | ----------------------------------: | --------------------: | ---------------------: |
+| `scalar-field` | local-scalar |     0.352 |      0.389 |     0.081–0.599 |             4,050 |                         404 (13.47) |                 6 / 0 |               baseline |
+| `A0`           | route-memory |     0.552 |      0.633 |         0–0.906 |             6,357 |                         309 (10.30) |                 9 / 4 |           25–5 (83.3%) |
+| `A1`           | route-memory |     0.530 |      0.582 |         0–0.870 |             6,107 |                         504 (16.80) |                 2 / 3 |           23–7 (76.7%) |
+| `A2`           | route-memory |     0.725 |      0.763 |         0–0.919 |             8,356 |                          235 (7.83) |                12 / 1 |           28–2 (93.3%) |
+| `A3`           | route-memory |     0.709 |      0.779 |         0–0.883 |             8,163 |                          196 (6.53) |                14 / 3 |           27–3 (90.0%) |
+| `A4`           | route-memory | **0.849** |  **0.866** | **0.729–0.927** |         **9,783** |                         623 (20.77) |                 3 / 0 |        **30–0 (100%)** |
+| `B0`           | local-scalar |     0.571 |      0.703 |         0–0.927 |             6,581 |                     **816 (27.20)** |                 6 / 4 |           22–8 (73.3%) |
+| `B1`           | local-scalar |     0.213 |      0.219 |         0–0.461 |             2,456 |                          254 (8.47) |                11 / 1 |           4–26 (13.3%) |
+
+### Per-engine interpretation
+
+- **Current `scalar-field`:** Its mean `Q = 0.352` was below six historical engines, but
+  it was the only strict-local engine with a delivery in every steady window. That
+  consistency matters for a default intended to work across arbitrary generated maps.
+- **A0, original retracing:** Exact retracing raised mean steady throughput to `0.552`,
+  but four steady windows produced no delivery and its `[0 s, 30 s]` total was lower
+  than current. The original model is neither the fastest nor the most reliable
+  route-memory option.
+- **A1, live adaptive retracing:** Live-food support and coverage avoidance improved
+  early visible traffic over A0, but mean steady throughput was slightly lower and three
+  steady windows remained empty.
+- **A2, directed home arcs:** A2 won 28 of 30 pairs and reached mean `Q = 0.725`. Its 12
+  empty visible windows alongside only one empty steady window show slow convergence
+  followed by strong steady traffic.
+- **A3, corrective exploration:** Its median `Q = 0.779` exceeded A2's, but three empty
+  steady windows lowered its mean. Fourteen empty visible windows make the startup cost
+  especially clear.
+- **A4, trip-quality breadcrumbs:** A4 was the overall leader: it won every pair, never
+  missed a steady window, and its worst run (`Q = 0.729`) exceeded the mean of every
+  other engine. Its whole-colony launch also made its visible result substantially
+  stronger than A2 and A3.
+- **B0, scalar gradients:** B0 was the strict-local throughput leader by mean, median,
+  and visible delivery count. Its aggregate hides a severe topology-specific failure,
+  however, so the current evidence supports a candidate implementation, not a default
+  replacement.
+- **B1, configurable node scalars:** B1 lost 26 of 30 pairs against current and had
+  lower mean, median, and visible throughput. The extra configurability did not recover
+  the first scalar model's performance under historical defaults.
+
+### Sparse `train-15` failure
+
+`train-15` is the sparse 160-node fixture with graph seed `111867`, `density = 0.25`,
+and `mapVariation = 0.55`. B0 delivered nothing in four of its five steady windows; the
+remaining run delivered seven times. Its five-run mean was therefore `Q = 0.0036`.
+Current delivered 47, 59, 102, 77, and 50 times in the same paired windows
+(`mean Q = 0.174`). A4 delivered 353, 336, 325, 331, and 299 times (`mean Q = 0.856`).
+
+This is a root behavior difference rather than an aggregate-statistics artifact. B0 can
+produce much more traffic than current after its scalar fields organize, but on this
+graph they usually did not organize into a productive route. Any B0 promotion must first
+explain and correct that topology-specific failure, then survive fresh sparse fixtures.
+
+### Hypothesis outcomes
+
+1. **A4 throughput advantage — supported for screening throughput.** A4's mean
+   `Q = 0.849` was above current (`0.352`), B0 (`0.571`), and B1 (`0.213`), and it beat
+   current in all 30 pairs. Cycle efficiency is unresolved because exact historical
+   cycle observations were outside this screen.
+2. **A2 startup and homing prediction — partially supported.** A2's low visible delivery
+   count and high steady `Q` match the predicted delayed startup direction. Visible
+   deliveries are not discovery throughput, and homing reliability was not measured, so
+   those parts remain open.
+3. **Larger irregular-graph breadcrumb advantage — mixed but directionally supported for
+   A4.** A4 remained productive on the sparse fixtures where current weakened and B0
+   collapsed. A0 and A1 also failed on `train-15`, so the result does not support a
+   blanket claim about every breadcrumb family.
+4. **Smaller native-lane gaps — unresolved.** This result contains only the common lane.
+5. **Scalar adaptation advantage — unresolved.** Food did not move in this static
+   screen.
+6. **Screening-step fidelity — unresolved.** The `0.25 s` ordering still needs
+   confirmation at the browser's `1/60 s` step.
+7. **Material gap without a 50-fold aggregate effect — supported.** A4's mean `Q` was
+   about 2.42 times current's and it won every pair. This is substantial, but it is not
+   a 50-fold aggregate difference.
+
+### Default decision
+
+The current `scalar-field` remains the default. Among engines that satisfy the project's
+strict-local invariant—no per-ant route or visited-set memory—it was less productive on
+average than B0 but was materially more robust: zero empty steady windows versus four
+for B0, including B0's near-total `train-15` failure.
+
+B0 is the high-throughput strict-local candidate. Its mean and median `Q` and its
+visible delivery count justify browser-fidelity, sparse-topology, and adaptation
+validation. They do not yet justify making its failure mode the default experience.
+
+A4 is the overall benchmark leader but is ineligible as the default under the current
+invariant. Its ants retain a loop-erased personal route and a decreasing return index,
+which gives carriers an exact breadcrumb path home. That is local-memory rather than
+global graph knowledge, but it still violates the stricter pheromone-only product
+constraint. A4 should remain an explicit comparison engine unless that invariant is
+deliberately changed; its throughput cannot be silently attributed to a better
+strict-local pheromone rule.
+
 ## Exploratory six-scenario quick screen
 
 The following read-only screen loaded each historical `src/colony.js` directly from Git
@@ -278,14 +403,16 @@ apparent result and justify keeping the two lanes separate.
 
 ## Comparability limits
 
-- **The exploratory screen has one run seed per graph.** It can identify large candidate
-  regressions but cannot estimate stochastic uncertainty.
+- **The exploratory screen has one run seed per graph; the completed common screen has
+  five.** The paired screen distinguishes consistent gaps from isolated seeds better,
+  but 30 structured pairs are still too few for a broad uncertainty claim.
 - **It uses the screening time step.** Precise values and rankings require `1/60 s`
   validation.
 - **It measures static throughput only.** It does not establish comparative homing,
   adaptation, or cycle efficiency.
-- **The latest main behavior is unmeasured.** Results for `a36bbb6`/`29e6d75` must not
-  be relabeled as results for `530a042` or `89fbab4`.
+- **Only the completed screen measures the registered current engine.** Results for the
+  exploratory `a36bbb6`/`29e6d75` baseline must not be relabeled as current; the
+  five-seed `scalar-field` row is the current comparison.
 - **Historical defaults are part of each family.** The screen does not isolate structure
   from tuning.
 - **Random choices cannot be synchronized draw-for-draw.** Families consume randomness
@@ -302,7 +429,7 @@ apparent result and justify keeping the two lanes separate.
 - **Simulation cost is not colony throughput.** Faster code and more food deliveries are
   separate measurements.
 
-The quick screen therefore justifies a controlled historical benchmark and identifies
-`3d6fd02` and `1347975` as the first families to validate. It does not establish a
-50-fold aggregate regression or authorize replacing the current local-knowledge model
-without the staged comparisons above.
+The completed screen promotes A4 (`3d6fd02`) as the route-memory validation leader and
+B0 (`97a4679`) as the strict-local throughput candidate. It does not establish a 50-fold
+aggregate regression. It also does not authorize replacing the current strict-local
+default before browser-fidelity, sparse-map, and adaptation validation.
